@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>DLL on TRIKKSS Blog</title>
+    <link>https://trikkss.github.io/tags/dll/</link>
+    <description>Recent content in DLL on TRIKKSS Blog</description>
+    <image>
+      <url>https://trikkss.github.io/img/pfp.png</url>
+      <link>https://trikkss.github.io/img/pfp.png</link>
+    </image>
+    <generator>Hugo -- gohugo.io</generator>
+    <lastBuildDate>Tue, 27 Dec 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://trikkss.github.io/tags/dll/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Malware - Windows API hashing 1</title>
+      <link>https://trikkss.github.io/posts/hiding_windows_api_calls_part1/</link>
+      <pubDate>Tue, 27 Dec 2022 00:00:00 +0000</pubDate>
+      
+      <guid>https://trikkss.github.io/posts/hiding_windows_api_calls_part1/</guid>
+      <description>What is Windows API Hashing This technique is often used by malware developers to hide their calls to the windows API. That way the blue team will have more difficulty reversing the malware and it is less flagged by an AV. Our goal is to make a PE without an import table.
+The Import Table Let&amp;rsquo;s compile a simple C program which will execute a simple reverse shell using WinExec API call.</description>
+    </item>
+    
+  </channel>
+</rss>
