@@ -16,8 +16,7 @@
       <pubDate>Tue, 27 Dec 2022 00:00:00 +0000</pubDate>
       
       <guid>https://trikkss.github.io/posts/hiding_windows_api_calls_part1/</guid>
-      <description>What is Windows API Hashing This technique is often used by malware developers to hide their calls to the windows API. That way the blue team will have more difficulty reversing the malware and it is less flagged by an AV. Our goal is to make a PE without an import table.
-The Import Table Let&amp;rsquo;s compile a simple C program which will execute a simple reverse shell using WinExec API call.</description>
+      <description>Windows API Hashing is a technique often used by malware developers to hide their calls to the windows API.</description>
     </item>
     
   </channel>
