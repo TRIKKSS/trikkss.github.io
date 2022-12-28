@@ -19,5 +19,14 @@
       <description>Windows API Hashing is a technique often used by malware developers to hide their calls to the windows API.</description>
     </item>
     
+    <item>
+      <title>Protonic Vault write up</title>
+      <link>https://trikkss.github.io/posts/protonic-vault-wu/</link>
+      <pubDate>Tue, 25 Oct 2022 00:00:00 +0000</pubDate>
+      
+      <guid>https://trikkss.github.io/posts/protonic-vault-wu/</guid>
+      <description>Write up of the Protonic Vault challenge from the 10k Root-Me CTF.</description>
+    </item>
+    
   </channel>
 </rss>
