@@ -3,33 +3,39 @@
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://trikkss.github.io/tags/c/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/tags/dll/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
+  </url><url>
+    <loc>https://trikkss.github.io/tags/iat/</loc>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/tags/malware/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
-    <loc>https://trikkss.github.io/posts/hiding_windows_api_calls_part1/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <loc>https://trikkss.github.io/posts/IAT_hooking/</loc>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/tags/pe/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/posts/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/tags/reverse-engineering/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/tags/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/</loc>
-    <lastmod>2022-12-27T00:00:00+00:00</lastmod>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/tags/windows/</loc>
+    <lastmod>2023-01-08T00:00:00+00:00</lastmod>
+  </url><url>
+    <loc>https://trikkss.github.io/posts/hiding_windows_api_calls_part1/</loc>
     <lastmod>2022-12-27T00:00:00+00:00</lastmod>
   </url><url>
     <loc>https://trikkss.github.io/tags/asar/</loc>
