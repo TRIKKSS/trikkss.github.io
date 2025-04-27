@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Tree-Sitter on TRIKKSS Blog</title>
+    <link>https://trikkss.github.io/tags/tree-sitter/</link>
+    <description>Recent content in Tree-Sitter on TRIKKSS Blog</description>
+    <image>
+      <url>https://trikkss.github.io/img/pfp.png</url>
+      <link>https://trikkss.github.io/img/pfp.png</link>
+    </image>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en</language>
+    <lastBuildDate>Sun, 27 Apr 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://trikkss.github.io/tags/tree-sitter/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>FCSC 2025 - fcsclang</title>
+      <link>https://trikkss.github.io/posts/fcsc2025_fcsclang/</link>
+      <pubDate>Sun, 27 Apr 2025 00:00:00 +0000</pubDate>
+      
+      <guid>https://trikkss.github.io/posts/fcsc2025_fcsclang/</guid>
+      <description>Write up du challenge fcsclang</description>
+    </item>
+    
+  </channel>
+</rss>

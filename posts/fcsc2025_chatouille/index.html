@@ -1,0 +1,598 @@
+<!doctype html><html lang=en dir=auto><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>FCSC 2025 - Chatouille | TRIKKSS Blog</title>
+<meta name=keywords content="Reverse engineering,Linux,z3,AVX,sha256"><meta name=description content="Write up du challenge Chatouille"><meta name=author content="TRIKKSS"><link rel=canonical href=https://trikkss.github.io/posts/fcsc2025_chatouille/><link crossorigin=anonymous href=/assets/css/stylesheet.css rel="preload stylesheet" as=style><script defer crossorigin=anonymous src=/assets/js/highlight.js onload=hljs.initHighlightingOnLoad()></script><link rel=icon href=https://trikkss.github.io/img/pfp.png><link rel=icon type=image/png sizes=16x16 href=https://trikkss.github.io/img/pfp.png><link rel=icon type=image/png sizes=32x32 href=https://trikkss.github.io/img/pfp.png><link rel=apple-touch-icon href=https://trikkss.github.io/img/pfp.png><link rel=mask-icon href=https://trikkss.github.io/img/pfp.png><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://trikkss.github.io/posts/fcsc2025_chatouille/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><meta property="og:title" content="FCSC 2025 - Chatouille"><meta property="og:description" content="Write up du challenge Chatouille"><meta property="og:type" content="article"><meta property="og:url" content="https://trikkss.github.io/posts/fcsc2025_chatouille/"><meta property="og:image" content="https://trikkss.github.io/img/pfp.png"><meta property="article:section" content="posts"><meta property="article:published_time" content="2025-04-27T00:00:00+00:00"><meta property="article:modified_time" content="2025-04-27T00:00:00+00:00"><meta property="og:site_name" content="TRIKKSS Blog"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://trikkss.github.io/img/pfp.png"><meta name=twitter:title content="FCSC 2025 - Chatouille"><meta name=twitter:description content="Write up du challenge Chatouille"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Posts","item":"https://trikkss.github.io/posts/"},{"@type":"ListItem","position":2,"name":"FCSC 2025 - Chatouille","item":"https://trikkss.github.io/posts/fcsc2025_chatouille/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"FCSC 2025 - Chatouille","name":"FCSC 2025 - Chatouille","description":"Write up du challenge Chatouille","keywords":["Reverse engineering","Linux","z3","AVX","sha256"],"articleBody":"vous pouvez retrouver le binaire joint avec le chall ici\nDécouverte du challenge Dans ce write-up, nous allons explorer un challenge de reverse engineering axé sur l’analyse d’un binaire utilisant des instructions AVX (Advanced Vector Extensions). J’ai passé (perdu ?) énormément de temps sur ce challenge en l’abordant de la mauvaise façon.\nAnalyse du binaire La fonction principale est plutôt simple, celle-ci va lire une entrée utilisateur de 128 octets, verifier que la taille de celle-ci est de 118 octets et définir des valeurs aux indexs 0x76, 0x7E et 0x7F de notre buffer.\nEnsuite elle va appeler 2 fonctions avec entrée notre binaire qui doivent chacune retourner 0.\nint __fastcall main(int argc, const char **argv, const char **envp) { int v3; // eax int v4; // edx int v5; // eax unsigned __int8 v7[128]; // [rsp+0h] [rbp-88h] BYREF memset(v7, 0, sizeof(v7)); v3 = read(0, v7, 0x80uLL); if ( v3 \u003c= 0 ) { perror(\"read\"); exit(1); } v4 = v3; v5 = v3 - 1; if ( v7[v5] == 10 ) { v7[v5] = 0; v4 = v5; } if ( v4 != 118 || (v7[0x76] = 0x80, *(_WORD *)\u0026v7[0x7E] = 0xB003, !shellcode_1((__int64)v7)) || !shellcode_2((__int64)v7) ) { puts(\":(\"); exit(0); } puts(\"\\\\o/\"); return 0; } Analyse de la première fonction Lorsque l’on ouvre la fonction, IDA ne parvient pas à produire une décompilation lisible pour cette fonction. La majorité du code est restituée en tant que séquence d’instructions assembleur brutes, sans traduction en C.\n_BOOL8 __fastcall shellcode_1(__int64 _RDI) { __asm { vmovdqa xmm7, cs:xmmword_7010 vmovdqa xmm0, cs:xmmword_7120 vmovdqa xmm13, cs:xmmword_7130 vmovdqu xmm5, xmmword ptr [rdi] vmovdqa xmm12, cs:xmmword_7020 vmovdqu xmm2, xmmword ptr [rdi+10h] vpalignr xmm14, xmm0, xmm13, 8 vpshufb xmm15, xmm5, xmm7 vmovdqu xmm6, xmmword ptr [rdi+20h] vpblendw xmm13, xmm13, xmm0, 0F0h vmovdqu xmm4, xmmword ptr [rdi+30h] vpaddd xmm0, xmm15, xmm12 vmovdqa xmm1, xmm13 vmovdqa xmm3, xmm14 vpshufb xmm6, xmm6, xmm7 sha256rnds2 xmm1, xmm14, xmm0 vmovdqa xmm11, cs:xmmword_7030 vpshufb xmm2, xmm2, xmm7 vpshufb xmm4, xmm4, xmm7 vpshufd xmm0, xmm0, 0Eh vmovdqa xmm10, cs:xmmword_7040 sha256msg1 xmm15, xmm2 vpalignr xmm8, xmm4, xmm6, 4 sha256rnds2 xmm3, xmm1, xmm0 vpaddd xmm0, xmm2, xmm11 vmovdqa xmm9, cs:xmmword_7050 sha256rnds2 xmm1, xmm3, xmm0 vpaddd xmm5, xmm15, xmm8 vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm5, xmm4 sha256rnds2 xmm3, xmm1, xmm0 vpaddd xmm0, xmm6, xmm10 vpalignr xmm15, xmm5, xmm4, 4 sha256rnds2 xmm1, xmm3, xmm0 sha256msg1 xmm2, xmm6 vpshufd xmm0, xmm0, 0Eh vpaddd xmm2, xmm2, xmm15 sha256msg1 xmm6, xmm4 sha256rnds2 xmm3, xmm1, xmm0 [...] vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm12, xmm13 sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm0, xmm12, cs:xmmword_70B0 vpalignr xmm9, xmm12, xmm13, 4 sha256msg1 xmm13, xmm12 vpaddd xmm11, xmm11, xmm9 sha256rnds2 xmm2, xmm4, xmm0 vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm11, xmm12 sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm0, xmm11, cs:xmmword_70C0 vpalignr xmm3, xmm11, xmm12, 4 sha256msg1 xmm12, xmm11 vpaddd xmm10, xmm10, xmm3 sha256rnds2 xmm2, xmm4, xmm0 vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm10, xmm11 sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm0, xmm10, cs:xmmword_70D0 vpalignr xmm9, xmm10, xmm11, 4 sha256msg1 xmm11, xmm10 vpaddd xmm13, xmm13, xmm9 sha256rnds2 xmm2, xmm4, xmm0 vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm13, xmm10 sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm0, xmm13, xmm8 vpalignr xmm8, xmm13, xmm10, 4 sha256msg1 xmm10, xmm13 vpaddd xmm12, xmm12, xmm8 sha256rnds2 xmm2, xmm4, xmm0 vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm12, xmm13 sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm0, xmm12, xmm15 vpalignr xmm15, xmm12, xmm13, 4 vpaddd xmm11, xmm11, xmm15 sha256rnds2 xmm2, xmm4, xmm0 vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm11, xmm12 sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm0, xmm11, xmm5 vpalignr xmm5, xmm11, xmm12, 4 vpaddd xmm3, xmm10, xmm5 sha256rnds2 xmm2, xmm4, xmm0 vpshufd xmm0, xmm0, 0Eh sha256msg2 xmm3, xmm11 sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm0, xmm3, xmm6 sha256rnds2 xmm2, xmm4, xmm0 vpshufd xmm0, xmm0, 0Eh sha256rnds2 xmm4, xmm2, xmm0 vpaddd xmm1, xmm2, xmm1 vpaddd xmm6, xmm4, xmm14 vpshufd xmm2, xmm1, 0B1h vpshufd xmm14, xmm6, 1Bh vpblendw xmm4, xmm14, xmm2, 0F0h vpalignr xmm10, xmm2, xmm14, 8 vpshufb xmm9, xmm4, xmm7 vpxor xmm13, xmm9, cs:xmmword_90C0 vpshufb xmm7, xmm10, xmm7 vptest xmm13, xmm13 } if ( !_ZF ) return 0LL; __asm { vpxor xmm8, xmm7, cs:xmmword_90D0 vptest xmm8, xmm8 } return _ZF != 0; } Lorsque je tombe sur ce shellcode conséquent, j’ai une seule idée qui me vient tête : il va probablement falloir utiliser de l’execution symbolique pour résoudre le shellcode (spoil : non).\nJe me lance alors durant plusieurs jours dans la résolution de cette unique fonction (il aurait peut être été plus intelligent de jeter un oeil à la deuxième fonction).\nLe fait qu’IDA ne supporte pas cette instruction n’est pas une exception : je n’ai trouvé aucun outil d’exécution symbolique capable de l’interpréter. Je commence donc à essayer de résoudre le challenge avec Miasm, puis avec angr, puis avec Triton, puis en réimplémentant les instructions sha256 en C et recréant un binaire sur lequel j’allais pouvoir faire de l’execution symbolique avec angr … allant jusqu’a réimplémenter mon propre moteur d’exec symbolique avec capstone et z3 ! Tout ça en vain.\nAprès avoir passé beaucoup de temps sur la première fonction sans succès, j’ai décidé de m’attaquer à la seconde. Ce n’est qu’après un long moment, en lisant la documentation Intel sur les instructions sha, que j’ai remarqué que le code fourni en exemple, implémentant SHA-256 avec des instructions AVX, ressemblait fortement à celui de ma première fonction. En réalité, celle-ci ne faisait qu’un simple SHA-256 de l’input avant de le comparer à un hash stocké en mémoire ! Beaucoup de temps perdu (et de cheveux), certes, mais cela m’aura permis d’apprendre énormément de choses sur l’exécution symbolique.\nDe toute façon, si j’avais réussi à inverser un SHA-256 avec Z3, je serais probablement en train de négocier un poste à la NSA à l’heure qu’il est.\nAnalyse de la seconde fonction Nous allons maintenant nous intéresser à la fonction clé du challenge.\nCelle-ci est presque entièrement constitué de 2 opérations :\nvpshufd sha256msg1 Basiquement, cette fonction ressemble à ça. Je ne vous ai pas mis l’intégralité du code mais celui-ci est très très long et répétitif.\nvmovdqu xmm6, xmmword ptr [rdi] vmovdqu xmm0, xmmword ptr [rdi+10h] vmovdqu xmm10, xmmword ptr [rdi+20h] vpshufd xmm1, xmm6, 39h ; '9' sha256msg1 xmm0, xmm6 vpshufd xmm2, xmm1, 39h ; '9' sha256msg1 xmm0, xmm1 vpshufd xmm3, xmm2, 39h ; '9' sha256msg1 xmm0, xmm2 vmovdqu xmm2, xmmword ptr [rdi+30h] vpshufd xmm4, xmm3, 39h ; '9' sha256msg1 xmm0, xmm3 vpshufd xmm5, xmm4, 39h ; '9' sha256msg1 xmm0, xmm4 vpshufd xmm7, xmm5, 39h ; '9' sha256msg1 xmm0, xmm5 vpshufd xmm8, xmm7, 39h ; '9' sha256msg1 xmm0, xmm7 sha256msg1 xmm0, xmm8 vpshufd xmm9, xmm8, 39h ; '9' vpshufd xmm11, xmm0, 39h ; '9' sha256msg1 xmm10, xmm0 vpshufd xmm12, xmm11, 39h ; '9' sha256msg1 xmm10, xmm11 vpshufd xmm13, xmm12, 39h ; '9' sha256msg1 xmm10, xmm12 vpshufd xmm14, xmm13, 39h ; '9' sha256msg1 xmm10, xmm13 vmovdqu xmm13, xmmword ptr [rdi+40h] vpshufd xmm15, xmm14, 39h ; '9' sha256msg1 xmm10, xmm14 vpshufd xmm6, xmm15, 39h ; '9' sha256msg1 xmm10, xmm15 vpshufd xmm0, xmm6, 39h ; '9' sha256msg1 xmm10, xmm6 sha256msg1 xmm10, xmm0 vpshufd xmm8, xmm0, 39h ; '9' vpshufd xmm1, xmm10, 39h ; '9' sha256msg1 xmm2, xmm10 vpshufd xmm3, xmm1, 39h ; '9' sha256msg1 xmm2, xmm1 vpshufd xmm4, xmm3, 39h ; '9' sha256msg1 xmm2, xmm3 vpshufd xmm5, xmm4, 39h ; '9' sha256msg1 xmm2, xmm4 vpshufd xmm7, xmm5, 39h ; '9' sha256msg1 xmm2, xmm5 vpshufd xmm10, xmm7, 39h ; '9' sha256msg1 xmm2, xmm7 vmovdqu xmm7, xmmword ptr [rdi+50h] vpshufd xmm11, xmm10, 39h ; '9' sha256msg1 xmm2, xmm10 sha256msg1 xmm2, xmm11 vpshufd xmm12, xmm11, 39h ; '9' vpshufd xmm14, xmm2, 39h ; '9' sha256msg1 xmm13, xmm2 vpshufd xmm15, xmm14, 39h ; '9' sha256msg1 xmm13, xmm14 vpshufd xmm6, xmm15, 39h ; '9' sha256msg1 xmm13, xmm15 vpshufd xmm0, xmm6, 39h ; '9' sha256msg1 xmm13, xmm6 vpshufd xmm2, xmm0, 39h ; '9' sha256msg1 xmm13, xmm0 vmovdqu xmm0, xmmword ptr [rdi+60h] vpshufd xmm1, xmm2, 39h ; '9' sha256msg1 xmm13, xmm2 vpshufd xmm3, xmm1, 39h ; '9' sha256msg1 xmm13, xmm1 sha256msg1 xmm13, xmm3 vpshufd xmm10, xmm3, 39h ; '9' vpshufd xmm4, xmm13, 39h ; '9' sha256msg1 xmm7, xmm13 vpshufd xmm5, xmm4, 39h ; '9' sha256msg1 xmm7, xmm4 vpshufd xmm11, xmm5, 39h ; '9' sha256msg1 xmm7, xmm5 vpshufd xmm13, xmm11, 39h ; '9' sha256msg1 xmm7, xmm11 vpshufd xmm14, xmm13, 39h ; '9' sha256msg1 xmm7, xmm13 vpshufd xmm15, xmm14, 39h ; '9' sha256msg1 xmm7, xmm14 vpshufd xmm6, xmm15, 39h ; '9' sha256msg1 xmm7, xmm15 vmovdqu xmm15, xmmword ptr [rdi+70h] sha256msg1 xmm7, xmm6 vpshufd xmm5, xmm6, 39h ; '9' vpshufd xmm2, xmm7, 39h ; '9' sha256msg1 xmm0, xmm7 vpshufd xmm1, xmm2, 39h ; '9' sha256msg1 xmm0, xmm2 vpshufd xmm3, xmm1, 39h ; '9' sha256msg1 xmm0, xmm1 vpshufd xmm7, xmm3, 39h ; '9' sha256msg1 xmm0, xmm3 vpshufd xmm4, xmm7, 39h ; '9' sha256msg1 xmm0, xmm7 vpshufd xmm11, xmm4, 39h ; '9' sha256msg1 xmm0, xmm4 vpshufd xmm13, xmm11, 39h ; '9' sha256msg1 xmm0, xmm11 sha256msg1 xmm0, xmm13 vpshufd xmm14, xmm13, 39h ; '9' vpshufd xmm6, xmm0, 39h ; '9' sha256msg1 xmm15, xmm0 sha256msg1 xmm15, xmm6 vpshufd xmm0, xmm6, 39h ; '9' vpshufd xmm2, xmm0, 39h ; '9' sha256msg1 xmm15, xmm0 vpshufd xmm1, xmm2, 39h ; '9' sha256msg1 xmm15, xmm2 vpshufd xmm3, xmm1, 39h ; '9' sha256msg1 xmm15, xmm1 vpshufd xmm7, xmm3, 39h ; '9' sha256msg1 xmm15, xmm3 [...] # 3875 lignes de vpshufd et sha256msg1 vpshufd xmm9, xmm2, 39h ; '9' vpxor xmm9, xmm9, cs:xmmword_9040 sha256msg1 xmm12, xmm8 vpshufd xmm8, xmm8, 39h ; '9' vpshufd xmm1, xmm8, 39h ; '9' sha256msg1 xmm12, xmm8 vpshufd xmm3, xmm1, 39h ; '9' sha256msg1 xmm12, xmm1 vpshufd xmm4, xmm3, 39h ; '9' sha256msg1 xmm12, xmm3 vpshufd xmm10, xmm4, 39h ; '9' sha256msg1 xmm12, xmm4 vpshufd xmm6, xmm10, 39h ; '9' sha256msg1 xmm12, xmm10 vpshufd xmm15, xmm6, 39h ; '9' sha256msg1 xmm12, xmm6 sha256msg1 xmm12, xmm15 vpshufd xmm0, xmm15, 39h ; '9' vpxor xmm0, xmm0, cs:xmmword_9050 sha256msg1 xmm13, xmm12 vpshufd xmm12, xmm12, 39h ; '9' vpshufd xmm2, xmm12, 39h ; '9' sha256msg1 xmm13, xmm12 vpshufd xmm8, xmm2, 39h ; '9' sha256msg1 xmm13, xmm2 vpshufd xmm1, xmm8, 39h ; '9' sha256msg1 xmm13, xmm8 vpshufd xmm3, xmm1, 39h ; '9' sha256msg1 xmm13, xmm1 vpshufd xmm4, xmm3, 39h ; '9' sha256msg1 xmm13, xmm3 vpshufd xmm10, xmm4, 39h ; '9' sha256msg1 xmm13, xmm4 sha256msg1 xmm13, xmm10 vpshufd xmm15, xmm10, 39h ; '9' vpxor xmm15, xmm15, cs:xmmword_9060 sha256msg1 xmm5, xmm13 vpshufd xmm13, xmm13, 39h ; '9' vpshufd xmm6, xmm13, 39h ; '9' sha256msg1 xmm5, xmm13 vpshufd xmm12, xmm6, 39h ; '9' sha256msg1 xmm5, xmm6 vpshufd xmm2, xmm12, 39h ; '9' sha256msg1 xmm5, xmm12 vpshufd xmm8, xmm2, 39h ; '9' sha256msg1 xmm5, xmm2 vpshufd xmm1, xmm8, 39h ; '9' sha256msg1 xmm5, xmm8 vpshufd xmm3, xmm1, 39h ; '9' sha256msg1 xmm5, xmm1 sha256msg1 xmm5, xmm3 vpshufd xmm10, xmm3, 39h ; '9' vpxor xmm10, xmm10, cs:xmmword_9070 sha256msg1 xmm14, xmm5 vpshufd xmm5, xmm5, 39h ; '9' vpshufd xmm4, xmm5, 39h ; '9' sha256msg1 xmm14, xmm5 vpshufd xmm13, xmm4, 39h ; '9' sha256msg1 xmm14, xmm4 vpshufd xmm6, xmm13, 39h ; '9' sha256msg1 xmm14, xmm13 vpshufd xmm12, xmm6, 39h ; '9' sha256msg1 xmm14, xmm6 vpshufd xmm2, xmm12, 39h ; '9' sha256msg1 xmm14, xmm12 vpshufd xmm8, xmm2, 39h ; '9' sha256msg1 xmm14, xmm2 sha256msg1 xmm14, xmm8 vpshufd xmm1, xmm8, 39h ; '9' vpxor xmm1, xmm1, cs:xmmword_9080 sha256msg1 xmm11, xmm14 vpshufd xmm14, xmm14, 39h ; '9' vpshufd xmm3, xmm14, 39h ; '9' sha256msg1 xmm11, xmm14 vpshufd xmm5, xmm3, 39h ; '9' sha256msg1 xmm11, xmm3 vpshufd xmm4, xmm5, 39h ; '9' sha256msg1 xmm11, xmm5 vpshufd xmm13, xmm4, 39h ; '9' sha256msg1 xmm11, xmm4 vpshufd xmm6, xmm13, 39h ; '9' sha256msg1 xmm11, xmm13 vpshufd xmm12, xmm6, 39h ; '9' sha256msg1 xmm11, xmm6 vpor xmm6, xmm0, xmm9 sha256msg1 xmm11, xmm12 vpshufd xmm2, xmm12, 39h ; '9' vpxor xmm2, xmm2, cs:xmmword_9090 sha256msg1 xmm7, xmm11 vpshufd xmm11, xmm11, 39h ; '9' vpshufd xmm8, xmm11, 39h ; '9' sha256msg1 xmm7, xmm11 vpor xmm11, xmm6, xmm1 vpshufd xmm14, xmm8, 39h ; '9' sha256msg1 xmm7, xmm8 vpshufd xmm3, xmm14, 39h ; '9' sha256msg1 xmm7, xmm14 vpshufd xmm5, xmm3, 39h ; '9' sha256msg1 xmm7, xmm3 vpor xmm3, xmm15, xmm10 vpshufd xmm4, xmm5, 39h ; '9' sha256msg1 xmm7, xmm5 vpor xmm5, xmm3, xmm2 vpshufd xmm13, xmm4, 39h ; '9' sha256msg1 xmm7, xmm4 vpshufd xmm12, xmm13, 39h ; '9' sha256msg1 xmm7, xmm13 vpxor xmm8, xmm12, cs:xmmword_90A0 vpxor xmm7, xmm7, cs:xmmword_90B0 vpxor xmm12, xmm12, xmm12 vpor xmm14, xmm11, xmm8 vpor xmm4, xmm5, xmm7 vpor xmm13, xmm14, xmm4 vpcmpeqd xmm0, xmm13, xmm12 vpmovmskb eax, xmm0 cmp eax, 0FFFFh setz dl movzx eax, dl retn L’instruction vpshufd L’instruction vpshufd (Vector Packed Shuffle Doublewords) sert à réorganiser les éléments d’un vecteur de 128 ou 256 bits. Chaque élément du vecteur est un entier de 32 bits (appelé “doubleword”). L’opération utilise un masque de contrôle pour déterminer comment les éléments doivent être mélangés : pour chaque position dans le résultat, le masque indique quel élément source doit être copié.\nConcrètement, vpshufd est utilisée pour :\nPermuter les éléments d’un vecteur selon un ordre précis, Dupliquer certains éléments si nécessaire, Réorganiser les données pour des calculs parallèles plus efficaces. Elle est très utilisée dans le traitement de données vectorielles, la cryptographie, et l’optimisation des algorithmes SIMD.\nSource: ChatGPT\nDans notre cas l’instruction est toujours appelé avec l’argument 0x39, on peut donc la traduire par simple rotation de 32 bits vers la droite sur le registre en entrée.\nDe plus, il est intéressant de noter que toutes les 4 appels à vpshufd, la valeur retrouve son état initial.\nL’instruction sha256msg1 D’après la document de intel, sha256msg1 (ainsi que sa soeur sha256msg2) semble servir à aider à faciliter génération du message schedule dans SHA-256. sert à faciliter la génération du message schedule dans SHA-256. Ne connaissant pas en détail le fonctionnement interne de SHA-256, cela reste un peu flou pour moi. Toutefois, pour ce challenge, il suffit de comprendre comment fonctionne cette instruction et non pas les autres.\nVoici un schéma du fonctionnement de celle-ci :\nOn peut très facilement la réimplémenter de la manière suivante :\n#include #include #include #include #define ROTR(x,y) (((x \u0026 0xffffffff) \u003e\u003e (y \u0026 31)) | (x \u003c\u003c (32 - (y \u0026 31)))) \u0026 0xffffffff #define SHR(x,n) ((x) \u003e\u003e (n)) static inline uint32_t sigma0(uint32_t x) { return ROTR(x, 7) ^ ROTR(x, 18) ^ SHR(x, 3); } __m128i sha256msg1_manual(__m128i a, __m128i b) { uint32_t x[4], y[4]; _mm_storeu_si128((__m128i*)x, a); // split la valeur sur 128 bits en blocs de 32 bits. _mm_storeu_si128((__m128i*)y, b); uint32_t r[4]; r[0] = sigma0(x[1]) + x[0]; r[1] = sigma0(x[2]) + x[1]; r[2] = sigma0(x[3]) + x[2]; r[3] = sigma0(y[0]) + x[3]; return _mm_set_epi32(r[3], r[2], r[1], r[0]); } void print_xmm(__m128i v, const char* label) { uint8_t bytes[16]; _mm_storeu_si128((__m128i*)bytes, v); printf(\"%s: 0x\", label); for (int i = 15; i \u003e= 0; i--) { printf(\"%02X\", bytes[i]); } printf(\"\\n\"); } int main() { /* on vient tester que notre implémentation retourne bien les mêmes résultats que l'instruction AVX */ __m128i xmm0; __m128i xmm6; xmm0 = _mm_set_epi32(0x45454545, 0x44444444, 0x42424242, 0x41414141); xmm6 = _mm_set_epi32(0x38373635, 0x34333231, 0x48474645, 0x44434241); xmm0 = sha256msg1_manual(xmm0, xmm6); // implém custom print_xmm(xmm0, \"sha256msg1 made home\"); xmm0 = _mm_set_epi32(0x45454545, 0x44444444, 0x42424242, 0x41414141); xmm6 = _mm_set_epi32(0x38373635, 0x34333231, 0x48474645, 0x44434241); xmm0 = _mm_sha256msg1_epu32(xmm0, xmm6); // instruction AVX print_xmm(xmm0, \"sha256msg1 official\"); return 0; } En compilant et exécutant le code de test, on peut vérifier que notre implémentation de sha256msg1 est correcte :\n╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille/tests ╰─➤ gcc -mavx -msha test.c -o test ╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille/tests ╰─➤ ./test sha256msg1 made home: 0x9FD6052117B7B7B7D35353535D9D9D9D sha256msg1 official: 0x9FD6052117B7B7B7D35353535D9D9D9D Compréhension de l’algorithme Il faut maintenant comprendre comment sont utilisées ces deux instructions.\nHeureusement, après un long moment à contempler cette fonction les yeux dans le vide, j’ai fini par repérer un pattern. En effet, la fonction peut être divisé en bloc de 8 appels à vpshufd et 8 appels à sha256msg1.\nSi l’on prend ce premier bloc, on se rend compte que celui-ci prend 2 bloc de 128 bits de notre entrée utilisateur et va ensuite appliquer 8 vpshufd puis effectuer 8 sha256msg1 avec chacun des outputs du vpshufd.\nVoici une partie simplifiée et commenté d’un bloc du shellcode.\n// récupère d2 blocs de 16 octets vmovdqu xmm6, xmmword ptr [rdi] vmovdqu xmm0, xmmword ptr [rdi+10h] // applique les transformations sur RDI vpshufd xmm1, xmm6, 39h vpshufd xmm2, xmm1, 39h vpshufd xmm3, xmm2, 39h vpshufd xmm4, xmm3, 39h vpshufd xmm5, xmm4, 39h vpshufd xmm7, xmm5, 39h vpshufd xmm8, xmm7, 39h vpshufd xmm9, xmm8, 39h // effectue 8 sha256msg1 sur xmm0 avec les transfo précédentes sha256msg1 xmm0, xmm6 sha256msg1 xmm0, xmm1 sha256msg1 xmm0, xmm2 sha256msg1 xmm0, xmm3 sha256msg1 xmm0, xmm4 sha256msg1 xmm0, xmm5 sha256msg1 xmm0, xmm7 sha256msg1 xmm0, xmm8 Ce bloc est ensuite réapliqué pour chaque bloc de 16 octets de notre entré utilisateur avec cette fois le résultat du bloc précédent comme deuxième opérande pour sha256msg1.\nVoici un schéma illustrant les 8 premiers blocs :\nLa sortie de chaque bloc (en rose) sert comme entrée à au prochain bloc.\nMais une fois que l’on a itéré sur toute notre entrée utilisateur, comment cela se passe-t-il ensuite ?\nEt bien c’est tout simple (j’ai mis au moins 2h à comprendre), le prochain bloc prend en deuxième entrée le résultat du bloc n-8.\nEt l’on va appliqué la même opération beaucoup de fois sur nos blocs jusqu’a la fin du shellcode.\nArrivé à la fin du shellcode, la sortie des 8 derniers blocs va être xoré avec des valeurs sur 128 bits. Afin que le shellcode retourne 0, il faut que les 8 derniers blocs soient égaux aux 8 valeurs par lesquelles ils sont xoré.\nknown_values = [ 0x27E2993E7DDB9BCE388260CED6DF027E, # dernier bloc 0xAB509EB2143D13035F595D84BF7A1DBF, # avant dernier 0x67172D37B77DAEFE99DB1D1FF04FBED5, # avant avant dernier 0x4325F6DFDC17B3D93A437A2FD174192F, # etc. 0xB6CEB5305C48B5C137C1EEC542DD7AB5, 0x36DE1DABA4D0C410A59ABC08D9270088, 0x4FB98600728660ADC7EB49ABF5F4BB97, 0xBD7A8C92FE4A7BD964145C1B415E27FE ] Voici une illustration du dernier bloc, en jaune nous pouvons retrouver les valeurs connues (et en bleu les inconnues, si jamais le point d’interrogation n’était pas assez explicite).\nOn peut donc supposer que pour résoudre ce challenge il va falloir partir des 8 dernières valeurs connues et remonter les blocs jusqu’a arriver au premier.\nPour se faire, j’ai implémenter nos blocs en python afin de les résoudres à l’aide de z3.\nRésolution avec z3 Voici mon implémentation d’un bloc avec z3 en python :\nfrom z3 import * def S0(x): return RotateRight(x,7) ^ RotateRight(x,18) ^ LShR(x,3) def sha256msg1(src1, src2): X = [ Extract(31, 0, src1), Extract(63, 32, src1), Extract(95, 64, src1), Extract(127,96, src1), ] Y = [ Extract(31, 0, src2), Extract(63, 32, src2), Extract(95, 64, src2), Extract(127,96, src2), ] mask32 = BitVecVal(0xFFFFFFFF, 32) R0 = (S0(X[1]) + X[0]) \u0026 mask32 R1 = (S0(X[2]) + X[1]) \u0026 mask32 R2 = (S0(X[3]) + X[2]) \u0026 mask32 R3 = (S0(Y[0]) + X[3]) \u0026 mask32 return Concat(R3, R2, R1, R0) def block(src1, src2): out = src1 for i in range(8): out = sha256msg1(out, RotateRight(src2, 32*i)) return out On peut ainsi retrouver notre première inconue en partant de la fin en appelant le code suivant :\ns = Solver() s.add(block(BitVec('x', 128), BitVecVal(0xAB509EB2143D13035F595D84BF7A1DBF, 128)) == BitVecVal(0x27E2993E7DDB9BCE388260CED6DF027E, 128)) if s.check() == sat: print(s.model()) else: print(\"no solution found ...\") Maintenant il nous reste plus qu’a remonter les blocs jusqu’a trouver notre valeur initiale !\nPour ça on va compter le nombre de fois qu’apparait l’instruction sha256msg1 dans le shellcode.\n╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille ╰─➤ cat shellcode2.txt | grep sha256msg1 | wc -l 2040 Sachant que chaque bloc utilise 8 fois l’instruction on peut donc diviser par 8 ce qui nous donne 255 blocs à remonter.\nVoici donc le script final :\nfrom z3 import * def S0(x): return RotateRight(x,7) ^ RotateRight(x,18) ^ LShR(x,3) def sha256msg1(src1, src2): X = [ Extract(31, 0, src1), # X[0] Extract(63, 32, src1), # X[1] Extract(95, 64, src1), # X[2] Extract(127,96, src1), # X[3] ] Y = [ Extract(31, 0, src2), # Y[0] Extract(63, 32, src2), # Y[1] Extract(95, 64, src2), # Y[2] Extract(127,96, src2), # Y[3] ] mask32 = BitVecVal(0xFFFFFFFF, 32) R0 = (S0(X[1]) + X[0]) \u0026 mask32 R1 = (S0(X[2]) + X[1]) \u0026 mask32 R2 = (S0(X[3]) + X[2]) \u0026 mask32 R3 = (S0(Y[0]) + X[3]) \u0026 mask32 return Concat(R3, R2, R1, R0) def block(src1, src2): out = src1 for i in range(8): out = sha256msg1(out, RotateRight(src2, 32*i)) return out round_values = [ 0x27E2993E7DDB9BCE388260CED6DF027E, 0xAB509EB2143D13035F595D84BF7A1DBF, 0x67172D37B77DAEFE99DB1D1FF04FBED5, 0x4325F6DFDC17B3D93A437A2FD174192F, 0xB6CEB5305C48B5C137C1EEC542DD7AB5, 0x36DE1DABA4D0C410A59ABC08D9270088, 0x4FB98600728660ADC7EB49ABF5F4BB97, 0xBD7A8C92FE4A7BD964145C1B415E27FE, ] for i in range(255): s = Solver() x = BitVec('x', 128) y = BitVecVal(round_values[(i + 1) % len(round_values)], 128) s.add(block(x, y) == BitVecVal(round_values[i % len(round_values)], 128)) if s.check() == sat: m = s.model() round_values[i % len(round_values)] = m[x].as_long() else: print(\"no solution found ...\") exit() print(b''.join(x.to_bytes(16, \"little\") for x in round_values[::-1])) et on obtiens notre flag en sortie !\n╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille ╰─➤ python3 final-solve.py b'FCSC{Shoh4IeFohmee1oichoo5iujohze2riPuuroochoh3vi0aGai5ae5aithooph2wohquai2takaeng9eeF3ue8QuooT2shiege5ee5ahL1vanoAnZ}\\x80\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x03\\xb0' ","wordCount":"3375","inLanguage":"en","datePublished":"2025-04-27T00:00:00Z","dateModified":"2025-04-27T00:00:00Z","author":{"@type":"Person","name":"TRIKKSS"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://trikkss.github.io/posts/fcsc2025_chatouille/"},"publisher":{"@type":"Organization","name":"TRIKKSS Blog","logo":{"@type":"ImageObject","url":"https://trikkss.github.io/img/pfp.png"}}}</script></head><body class=dark id=top><script>localStorage.getItem("pref-theme")==="light"&&document.body.classList.remove("dark")</script><header class=header><nav class=nav><div class=logo><a href=https://trikkss.github.io/ accesskey=h title="Home (Alt + H)"><img src=https://trikkss.github.io/img/pfp.png alt aria-label=logo height=35>Home</a><div class=logo-switches><button id=theme-toggle accesskey=t title="(Alt + T)"><svg id="moon" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg><svg id="sun" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button><ul class=lang-switch><li>|</li></ul></div></div><ul id=menu><li><a href=https://trikkss.github.io/posts/ title=Posts><span>Posts</span></a></li><li><a href=https://trikkss.github.io/tags/ title=Tags><span>Tags</span></a></li></ul></nav></header><main class=main><article class=post-single><header class=post-header><div class=breadcrumbs><a href=https://trikkss.github.io/>Home</a>&nbsp;»&nbsp;<a href=https://trikkss.github.io/posts/>Posts</a></div><h1 class=post-title>FCSC 2025 - Chatouille</h1><div class=post-meta><span title='2025-04-27 00:00:00 +0000 UTC'>April 27, 2025</span>&nbsp;·&nbsp;16 min&nbsp;·&nbsp;3375 words&nbsp;·&nbsp;TRIKKSS</div></header><div class=toc><details open><summary accesskey=c title="(Alt + C)"><span class=details>Table of Contents</span></summary><div class=inner><nav id=TableOfContents><ul><li><a href=#découverte-du-challenge>Découverte du challenge</a></li><li><a href=#analyse-du-binaire>Analyse du binaire</a></li><li><a href=#analyse-de-la-première-fonction>Analyse de la première fonction</a></li><li><a href=#analyse-de-la-seconde-fonction>Analyse de la seconde fonction</a><ul><li><a href=#linstruction-vpshufd>L&rsquo;instruction vpshufd</a></li><li><a href=#linstruction-sha256msg1>L&rsquo;instruction sha256msg1</a></li><li><a href=#compréhension-de-lalgorithme>Compréhension de l&rsquo;algorithme</a></li><li><a href=#résolution-avec-z3>Résolution avec z3</a></li></ul></li></ul></nav></div></details></div><div class=post-content><p><em>vous pouvez retrouver le binaire joint avec le chall <a href=/static/chatouille>ici</a></em></p><p><img loading=lazy src=/img/posts/fcsc2025-chatouille/challenge.png alt="description du challenge"></p><h2 id=découverte-du-challenge>Découverte du challenge<a hidden class=anchor aria-hidden=true href=#découverte-du-challenge>#</a></h2><p>Dans ce write-up, nous allons explorer un challenge de reverse engineering axé sur l&rsquo;analyse d&rsquo;un binaire utilisant des instructions AVX (Advanced Vector Extensions). J&rsquo;ai passé (perdu ?) énormément de temps sur ce challenge en l&rsquo;abordant de la mauvaise façon.</p><h2 id=analyse-du-binaire>Analyse du binaire<a hidden class=anchor aria-hidden=true href=#analyse-du-binaire>#</a></h2><p>La fonction principale est plutôt simple, celle-ci va lire une entrée utilisateur de <code>128</code> octets, verifier que la taille de celle-ci est de <code>118</code> octets et définir des valeurs aux indexs <code>0x76</code>, <code>0x7E</code> et <code>0x7F</code> de notre buffer.</p><p>Ensuite elle va appeler 2 fonctions avec entrée notre binaire qui doivent chacune retourner 0.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=kt>int</span> <span class=kr>__fastcall</span> <span class=nf>main</span><span class=p>(</span><span class=kt>int</span> <span class=n>argc</span><span class=p>,</span> <span class=k>const</span> <span class=kt>char</span> <span class=o>**</span><span class=n>argv</span><span class=p>,</span> <span class=k>const</span> <span class=kt>char</span> <span class=o>**</span><span class=n>envp</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kt>int</span> <span class=n>v3</span><span class=p>;</span> <span class=c1>// eax
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>int</span> <span class=n>v4</span><span class=p>;</span> <span class=c1>// edx
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>int</span> <span class=n>v5</span><span class=p>;</span> <span class=c1>// eax
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>unsigned</span> <span class=kr>__int8</span> <span class=n>v7</span><span class=p>[</span><span class=mi>128</span><span class=p>];</span> <span class=c1>// [rsp+0h] [rbp-88h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>
+</span></span><span class=line><span class=cl>  <span class=nf>memset</span><span class=p>(</span><span class=n>v7</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>v7</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>  <span class=n>v3</span> <span class=o>=</span> <span class=nf>read</span><span class=p>(</span><span class=mi>0</span><span class=p>,</span> <span class=n>v7</span><span class=p>,</span> <span class=mh>0x80uLL</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=n>v3</span> <span class=o>&lt;=</span> <span class=mi>0</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;read&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=n>v4</span> <span class=o>=</span> <span class=n>v3</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=n>v5</span> <span class=o>=</span> <span class=n>v3</span> <span class=o>-</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=n>v7</span><span class=p>[</span><span class=n>v5</span><span class=p>]</span> <span class=o>==</span> <span class=mi>10</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>v7</span><span class=p>[</span><span class=n>v5</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>v4</span> <span class=o>=</span> <span class=n>v5</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=n>v4</span> <span class=o>!=</span> <span class=mi>118</span>
+</span></span><span class=line><span class=cl>    <span class=o>||</span> <span class=p>(</span><span class=n>v7</span><span class=p>[</span><span class=mh>0x76</span><span class=p>]</span> <span class=o>=</span> <span class=mh>0x80</span><span class=p>,</span> <span class=o>*</span><span class=p>(</span><span class=n>_WORD</span> <span class=o>*</span><span class=p>)</span><span class=o>&amp;</span><span class=n>v7</span><span class=p>[</span><span class=mh>0x7E</span><span class=p>]</span> <span class=o>=</span> <span class=mh>0xB003</span><span class=p>,</span> <span class=o>!</span><span class=nf>shellcode_1</span><span class=p>((</span><span class=kr>__int64</span><span class=p>)</span><span class=n>v7</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>    <span class=o>||</span> <span class=o>!</span><span class=nf>shellcode_2</span><span class=p>((</span><span class=kr>__int64</span><span class=p>)</span><span class=n>v7</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>puts</span><span class=p>(</span><span class=s>&#34;:(&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>exit</span><span class=p>(</span><span class=mi>0</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=nf>puts</span><span class=p>(</span><span class=s>&#34;</span><span class=se>\\</span><span class=s>o/&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><h2 id=analyse-de-la-première-fonction>Analyse de la première fonction<a hidden class=anchor aria-hidden=true href=#analyse-de-la-première-fonction>#</a></h2><p>Lorsque l&rsquo;on ouvre la fonction, IDA ne parvient pas à produire une décompilation lisible pour cette fonction. La majorité du code est restituée en tant que séquence d&rsquo;instructions assembleur brutes, sans traduction en C.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=n>_BOOL8</span> <span class=kr>__fastcall</span> <span class=nf>shellcode_1</span><span class=p>(</span><span class=kr>__int64</span> <span class=n>_RDI</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kr>__asm</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm7</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_7010</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm0</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_7120</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm13</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_7130</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqu</span> <span class=n>xmm5</span><span class=p>,</span> <span class=n>xmmword</span> <span class=n>ptr</span> <span class=p>[</span><span class=n>rdi</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm12</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_7020</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqu</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmmword</span> <span class=n>ptr</span> <span class=p>[</span><span class=n>rdi</span><span class=o>+</span><span class=mi>10</span><span class=n>h</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm14</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm13</span><span class=p>,</span> <span class=mi>8</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufb</span> <span class=n>xmm15</span><span class=p>,</span> <span class=n>xmm5</span><span class=p>,</span> <span class=n>xmm7</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqu</span> <span class=n>xmm6</span><span class=p>,</span> <span class=n>xmmword</span> <span class=n>ptr</span> <span class=p>[</span><span class=n>rdi</span><span class=o>+</span><span class=mi>20</span><span class=n>h</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpblendw</span> <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mf>0F</span><span class=mi>0</span><span class=n>h</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqu</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmmword</span> <span class=n>ptr</span> <span class=p>[</span><span class=n>rdi</span><span class=o>+</span><span class=mi>30</span><span class=n>h</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm15</span><span class=p>,</span> <span class=n>xmm12</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm13</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm14</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufb</span> <span class=n>xmm6</span><span class=p>,</span> <span class=n>xmm6</span><span class=p>,</span> <span class=n>xmm7</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm14</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm11</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_7030</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufb</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm7</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufb</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm7</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm10</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_7040</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg1</span> <span class=n>xmm15</span><span class=p>,</span> <span class=n>xmm2</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm8</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm6</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm11</span>
+</span></span><span class=line><span class=cl>    <span class=n>vmovdqa</span> <span class=n>xmm9</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_7050</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm5</span><span class=p>,</span> <span class=n>xmm15</span><span class=p>,</span> <span class=n>xmm8</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm5</span><span class=p>,</span> <span class=n>xmm4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm6</span><span class=p>,</span> <span class=n>xmm10</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm15</span><span class=p>,</span> <span class=n>xmm5</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg1</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm6</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm15</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg1</span> <span class=n>xmm6</span><span class=p>,</span> <span class=n>xmm4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=p>[...]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm13</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm12</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_70B0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm9</span><span class=p>,</span> <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm13</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg1</span> <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm12</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm9</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm12</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm11</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_70C0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm12</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg1</span> <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm11</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm3</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm11</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm10</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_70D0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm9</span><span class=p>,</span> <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm11</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg1</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm10</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm9</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm10</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm8</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm8</span><span class=p>,</span> <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm10</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg1</span> <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm13</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm8</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm13</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm15</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm15</span><span class=p>,</span> <span class=n>xmm12</span><span class=p>,</span> <span class=n>xmm13</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm15</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm12</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm5</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm5</span><span class=p>,</span> <span class=n>xmm11</span><span class=p>,</span> <span class=n>xmm12</span><span class=p>,</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm5</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256msg2</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm11</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm3</span><span class=p>,</span> <span class=n>xmm6</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm0</span><span class=p>,</span> <span class=mi>0</span><span class=n>Eh</span>
+</span></span><span class=line><span class=cl>    <span class=n>sha256rnds2</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm1</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm1</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpaddd</span>  <span class=n>xmm6</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm14</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm1</span><span class=p>,</span> <span class=mi>0</span><span class=n>B1h</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufd</span> <span class=n>xmm14</span><span class=p>,</span> <span class=n>xmm6</span><span class=p>,</span> <span class=mi>1</span><span class=n>Bh</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpblendw</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm14</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=mf>0F</span><span class=mi>0</span><span class=n>h</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpalignr</span> <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm2</span><span class=p>,</span> <span class=n>xmm14</span><span class=p>,</span> <span class=mi>8</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufb</span> <span class=n>xmm9</span><span class=p>,</span> <span class=n>xmm4</span><span class=p>,</span> <span class=n>xmm7</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpxor</span>   <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm9</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_90C0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpshufb</span> <span class=n>xmm7</span><span class=p>,</span> <span class=n>xmm10</span><span class=p>,</span> <span class=n>xmm7</span>
+</span></span><span class=line><span class=cl>    <span class=n>vptest</span>  <span class=n>xmm13</span><span class=p>,</span> <span class=n>xmm13</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=n>_ZF</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0LL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=kr>__asm</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>vpxor</span>   <span class=n>xmm8</span><span class=p>,</span> <span class=n>xmm7</span><span class=p>,</span> <span class=nl>cs</span><span class=p>:</span><span class=n>xmmword_90D0</span>
+</span></span><span class=line><span class=cl>    <span class=n>vptest</span>  <span class=n>xmm8</span><span class=p>,</span> <span class=n>xmm8</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=n>_ZF</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>Lorsque je tombe sur ce shellcode conséquent, j&rsquo;ai une seule idée qui me vient tête : il va probablement falloir utiliser de l&rsquo;execution symbolique pour résoudre le shellcode (spoil : non).</p><p>Je me lance alors durant plusieurs jours dans la résolution de cette unique fonction (il aurait peut être été plus intelligent de jeter un oeil à la deuxième fonction).</p><p>Le fait qu&rsquo;IDA ne supporte pas cette instruction n&rsquo;est pas une exception : je n&rsquo;ai trouvé aucun outil d&rsquo;exécution symbolique capable de l&rsquo;interpréter. Je commence donc à essayer de résoudre le challenge avec Miasm, puis avec angr, puis avec Triton, puis en réimplémentant les instructions sha256 en C et recréant un binaire sur lequel j&rsquo;allais pouvoir faire de l&rsquo;execution symbolique avec angr &mldr; allant jusqu&rsquo;a réimplémenter mon propre moteur d&rsquo;exec symbolique avec capstone et z3 ! Tout ça en vain.</p><p>Après avoir passé beaucoup de temps sur la première fonction sans succès, j&rsquo;ai décidé de m&rsquo;attaquer à la seconde. Ce n’est qu’après un long moment, en lisant la documentation Intel sur les instructions <code>sha</code>, que j’ai remarqué que le code fourni en exemple, implémentant SHA-256 avec des instructions AVX, ressemblait fortement à celui de ma première fonction. En réalité, celle-ci ne faisait qu&rsquo;un simple SHA-256 de l&rsquo;input avant de le comparer à un hash stocké en mémoire ! Beaucoup de temps perdu (et de cheveux), certes, mais cela m&rsquo;aura permis d’apprendre énormément de choses sur l’exécution symbolique.</p><p>De toute façon, si j&rsquo;avais réussi à inverser un <code>SHA-256</code> avec Z3, je serais probablement en train de négocier un poste à la NSA à l&rsquo;heure qu&rsquo;il est.</p><h2 id=analyse-de-la-seconde-fonction>Analyse de la seconde fonction<a hidden class=anchor aria-hidden=true href=#analyse-de-la-seconde-fonction>#</a></h2><p>Nous allons maintenant nous intéresser à la fonction clé du challenge.</p><p>Celle-ci est presque entièrement constitué de 2 opérations :</p><ul><li>vpshufd</li><li>sha256msg1</li></ul><p>Basiquement, cette fonction ressemble à ça. Je ne vous ai pas mis l&rsquo;intégralité du code mais celui-ci est très très long et répétitif.</p><pre tabindex=0><code class=language-assembly data-lang=assembly>vmovdqu xmm6, xmmword ptr [rdi]
+vmovdqu xmm0, xmmword ptr [rdi+10h]
+vmovdqu xmm10, xmmword ptr [rdi+20h]
+vpshufd xmm1, xmm6, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm6
+vpshufd xmm2, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm1
+vpshufd xmm3, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm2
+vmovdqu xmm2, xmmword ptr [rdi+30h]
+vpshufd xmm4, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm3
+vpshufd xmm5, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm4
+vpshufd xmm7, xmm5, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm5
+vpshufd xmm8, xmm7, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm7
+sha256msg1 xmm0, xmm8
+vpshufd xmm9, xmm8, 39h ; &#39;9&#39;
+vpshufd xmm11, xmm0, 39h ; &#39;9&#39;
+sha256msg1 xmm10, xmm0
+vpshufd xmm12, xmm11, 39h ; &#39;9&#39;
+sha256msg1 xmm10, xmm11
+vpshufd xmm13, xmm12, 39h ; &#39;9&#39;
+sha256msg1 xmm10, xmm12
+vpshufd xmm14, xmm13, 39h ; &#39;9&#39;
+sha256msg1 xmm10, xmm13
+vmovdqu xmm13, xmmword ptr [rdi+40h]
+vpshufd xmm15, xmm14, 39h ; &#39;9&#39;
+sha256msg1 xmm10, xmm14
+vpshufd xmm6, xmm15, 39h ; &#39;9&#39;
+sha256msg1 xmm10, xmm15
+vpshufd xmm0, xmm6, 39h ; &#39;9&#39;
+sha256msg1 xmm10, xmm6
+sha256msg1 xmm10, xmm0
+vpshufd xmm8, xmm0, 39h ; &#39;9&#39;
+vpshufd xmm1, xmm10, 39h ; &#39;9&#39;
+sha256msg1 xmm2, xmm10
+vpshufd xmm3, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm2, xmm1
+vpshufd xmm4, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm2, xmm3
+vpshufd xmm5, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm2, xmm4
+vpshufd xmm7, xmm5, 39h ; &#39;9&#39;
+sha256msg1 xmm2, xmm5
+vpshufd xmm10, xmm7, 39h ; &#39;9&#39;
+sha256msg1 xmm2, xmm7
+vmovdqu xmm7, xmmword ptr [rdi+50h]
+vpshufd xmm11, xmm10, 39h ; &#39;9&#39;
+sha256msg1 xmm2, xmm10
+sha256msg1 xmm2, xmm11
+vpshufd xmm12, xmm11, 39h ; &#39;9&#39;
+vpshufd xmm14, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm2
+vpshufd xmm15, xmm14, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm14
+vpshufd xmm6, xmm15, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm15
+vpshufd xmm0, xmm6, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm6
+vpshufd xmm2, xmm0, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm0
+vmovdqu xmm0, xmmword ptr [rdi+60h]
+vpshufd xmm1, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm2
+vpshufd xmm3, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm1
+sha256msg1 xmm13, xmm3
+vpshufd xmm10, xmm3, 39h ; &#39;9&#39;
+vpshufd xmm4, xmm13, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm13
+vpshufd xmm5, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm4
+vpshufd xmm11, xmm5, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm5
+vpshufd xmm13, xmm11, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm11
+vpshufd xmm14, xmm13, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm13
+vpshufd xmm15, xmm14, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm14
+vpshufd xmm6, xmm15, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm15
+vmovdqu xmm15, xmmword ptr [rdi+70h]
+sha256msg1 xmm7, xmm6
+vpshufd xmm5, xmm6, 39h ; &#39;9&#39;
+vpshufd xmm2, xmm7, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm7
+vpshufd xmm1, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm2
+vpshufd xmm3, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm1
+vpshufd xmm7, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm3
+vpshufd xmm4, xmm7, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm7
+vpshufd xmm11, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm4
+vpshufd xmm13, xmm11, 39h ; &#39;9&#39;
+sha256msg1 xmm0, xmm11
+sha256msg1 xmm0, xmm13
+vpshufd xmm14, xmm13, 39h ; &#39;9&#39;
+vpshufd xmm6, xmm0, 39h ; &#39;9&#39;
+sha256msg1 xmm15, xmm0
+sha256msg1 xmm15, xmm6
+vpshufd xmm0, xmm6, 39h ; &#39;9&#39;
+vpshufd xmm2, xmm0, 39h ; &#39;9&#39;
+sha256msg1 xmm15, xmm0
+vpshufd xmm1, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm15, xmm2
+vpshufd xmm3, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm15, xmm1
+vpshufd xmm7, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm15, xmm3
+
+[...] # 3875 lignes de vpshufd et sha256msg1
+
+vpshufd xmm9, xmm2, 39h ; &#39;9&#39;
+vpxor   xmm9, xmm9, cs:xmmword_9040
+sha256msg1 xmm12, xmm8
+vpshufd xmm8, xmm8, 39h ; &#39;9&#39;
+vpshufd xmm1, xmm8, 39h ; &#39;9&#39;
+sha256msg1 xmm12, xmm8
+vpshufd xmm3, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm12, xmm1
+vpshufd xmm4, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm12, xmm3
+vpshufd xmm10, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm12, xmm4
+vpshufd xmm6, xmm10, 39h ; &#39;9&#39;
+sha256msg1 xmm12, xmm10
+vpshufd xmm15, xmm6, 39h ; &#39;9&#39;
+sha256msg1 xmm12, xmm6
+sha256msg1 xmm12, xmm15
+vpshufd xmm0, xmm15, 39h ; &#39;9&#39;
+vpxor   xmm0, xmm0, cs:xmmword_9050
+sha256msg1 xmm13, xmm12
+vpshufd xmm12, xmm12, 39h ; &#39;9&#39;
+vpshufd xmm2, xmm12, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm12
+vpshufd xmm8, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm2
+vpshufd xmm1, xmm8, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm8
+vpshufd xmm3, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm1
+vpshufd xmm4, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm3
+vpshufd xmm10, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm13, xmm4
+sha256msg1 xmm13, xmm10
+vpshufd xmm15, xmm10, 39h ; &#39;9&#39;
+vpxor   xmm15, xmm15, cs:xmmword_9060
+sha256msg1 xmm5, xmm13
+vpshufd xmm13, xmm13, 39h ; &#39;9&#39;
+vpshufd xmm6, xmm13, 39h ; &#39;9&#39;
+sha256msg1 xmm5, xmm13
+vpshufd xmm12, xmm6, 39h ; &#39;9&#39;
+sha256msg1 xmm5, xmm6
+vpshufd xmm2, xmm12, 39h ; &#39;9&#39;
+sha256msg1 xmm5, xmm12
+vpshufd xmm8, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm5, xmm2
+vpshufd xmm1, xmm8, 39h ; &#39;9&#39;
+sha256msg1 xmm5, xmm8
+vpshufd xmm3, xmm1, 39h ; &#39;9&#39;
+sha256msg1 xmm5, xmm1
+sha256msg1 xmm5, xmm3
+vpshufd xmm10, xmm3, 39h ; &#39;9&#39;
+vpxor   xmm10, xmm10, cs:xmmword_9070
+sha256msg1 xmm14, xmm5
+vpshufd xmm5, xmm5, 39h ; &#39;9&#39;
+vpshufd xmm4, xmm5, 39h ; &#39;9&#39;
+sha256msg1 xmm14, xmm5
+vpshufd xmm13, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm14, xmm4
+vpshufd xmm6, xmm13, 39h ; &#39;9&#39;
+sha256msg1 xmm14, xmm13
+vpshufd xmm12, xmm6, 39h ; &#39;9&#39;
+sha256msg1 xmm14, xmm6
+vpshufd xmm2, xmm12, 39h ; &#39;9&#39;
+sha256msg1 xmm14, xmm12
+vpshufd xmm8, xmm2, 39h ; &#39;9&#39;
+sha256msg1 xmm14, xmm2
+sha256msg1 xmm14, xmm8
+vpshufd xmm1, xmm8, 39h ; &#39;9&#39;
+vpxor   xmm1, xmm1, cs:xmmword_9080
+sha256msg1 xmm11, xmm14
+vpshufd xmm14, xmm14, 39h ; &#39;9&#39;
+vpshufd xmm3, xmm14, 39h ; &#39;9&#39;
+sha256msg1 xmm11, xmm14
+vpshufd xmm5, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm11, xmm3
+vpshufd xmm4, xmm5, 39h ; &#39;9&#39;
+sha256msg1 xmm11, xmm5
+vpshufd xmm13, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm11, xmm4
+vpshufd xmm6, xmm13, 39h ; &#39;9&#39;
+sha256msg1 xmm11, xmm13
+vpshufd xmm12, xmm6, 39h ; &#39;9&#39;
+sha256msg1 xmm11, xmm6
+vpor    xmm6, xmm0, xmm9
+sha256msg1 xmm11, xmm12
+vpshufd xmm2, xmm12, 39h ; &#39;9&#39;
+vpxor   xmm2, xmm2, cs:xmmword_9090
+sha256msg1 xmm7, xmm11
+vpshufd xmm11, xmm11, 39h ; &#39;9&#39;
+vpshufd xmm8, xmm11, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm11
+vpor    xmm11, xmm6, xmm1
+vpshufd xmm14, xmm8, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm8
+vpshufd xmm3, xmm14, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm14
+vpshufd xmm5, xmm3, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm3
+vpor    xmm3, xmm15, xmm10
+vpshufd xmm4, xmm5, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm5
+vpor    xmm5, xmm3, xmm2
+vpshufd xmm13, xmm4, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm4
+vpshufd xmm12, xmm13, 39h ; &#39;9&#39;
+sha256msg1 xmm7, xmm13
+vpxor   xmm8, xmm12, cs:xmmword_90A0
+vpxor   xmm7, xmm7, cs:xmmword_90B0
+vpxor   xmm12, xmm12, xmm12
+vpor    xmm14, xmm11, xmm8
+vpor    xmm4, xmm5, xmm7
+vpor    xmm13, xmm14, xmm4
+vpcmpeqd xmm0, xmm13, xmm12
+vpmovmskb eax, xmm0
+cmp     eax, 0FFFFh
+setz    dl
+movzx   eax, dl
+retn
+</code></pre><h3 id=linstruction-vpshufd>L&rsquo;instruction vpshufd<a hidden class=anchor aria-hidden=true href=#linstruction-vpshufd>#</a></h3><blockquote><p>L&rsquo;instruction vpshufd (Vector Packed Shuffle Doublewords) sert à réorganiser les éléments d&rsquo;un vecteur de 128 ou 256 bits. Chaque élément du vecteur est un entier de 32 bits (appelé &ldquo;doubleword&rdquo;).
+L&rsquo;opération utilise un masque de contrôle pour déterminer comment les éléments doivent être mélangés : pour chaque position dans le résultat, le masque indique quel élément source doit être copié.</p></blockquote><blockquote><p>Concrètement, vpshufd est utilisée pour :</p><ul><li>Permuter les éléments d&rsquo;un vecteur selon un ordre précis,</li><li>Dupliquer certains éléments si nécessaire,</li><li>Réorganiser les données pour des calculs parallèles plus efficaces.</li></ul></blockquote><blockquote><p>Elle est très utilisée dans le traitement de données vectorielles, la cryptographie, et l&rsquo;optimisation des algorithmes SIMD.</p></blockquote><blockquote><p><em>Source: ChatGPT</em></p></blockquote><p>Dans notre cas l&rsquo;instruction est toujours appelé avec l&rsquo;argument 0x39, on peut donc la traduire par simple rotation de 32 bits vers la droite sur le registre en entrée.</p><p>De plus, il est intéressant de noter que toutes les 4 appels à vpshufd, la valeur retrouve son état initial.</p><h3 id=linstruction-sha256msg1>L&rsquo;instruction sha256msg1<a hidden class=anchor aria-hidden=true href=#linstruction-sha256msg1>#</a></h3><p>D&rsquo;après la document de intel, <code>sha256msg1</code> (ainsi que sa soeur <code>sha256msg2</code>) semble servir à aider à faciliter génération du <em>message schedule</em> dans SHA-256. sert à faciliter la génération du message schedule dans SHA-256. Ne connaissant pas en détail le fonctionnement interne de SHA-256, cela reste un peu flou pour moi. Toutefois, pour ce challenge, il suffit de comprendre comment fonctionne cette instruction et non pas les autres.</p><p>Voici un schéma du fonctionnement de celle-ci :</p><p><img loading=lazy src=/img/posts/fcsc2025-chatouille/sha256msg1.png alt=sha256msg1></p><p>On peut très facilement la réimplémenter de la manière suivante :</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdint.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;x86intrin.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp></span>
+</span></span><span class=line><span class=cl><span class=cp>#define ROTR(x,y) (((x &amp; 0xffffffff) &gt;&gt; (y &amp; 31)) | (x &lt;&lt; (32 - (y &amp; 31)))) &amp; 0xffffffff
+</span></span></span><span class=line><span class=cl><span class=cp>#define SHR(x,n)  ((x) &gt;&gt; (n))
+</span></span></span><span class=line><span class=cl><span class=cp></span>
+</span></span><span class=line><span class=cl><span class=k>static</span> <span class=kr>inline</span> <span class=kt>uint32_t</span> <span class=nf>sigma0</span><span class=p>(</span><span class=kt>uint32_t</span> <span class=n>x</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>ROTR</span><span class=p>(</span><span class=n>x</span><span class=p>,</span> <span class=mi>7</span><span class=p>)</span> <span class=o>^</span> <span class=nf>ROTR</span><span class=p>(</span><span class=n>x</span><span class=p>,</span> <span class=mi>18</span><span class=p>)</span> <span class=o>^</span> <span class=nf>SHR</span><span class=p>(</span><span class=n>x</span><span class=p>,</span> <span class=mi>3</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kr>__m128i</span> <span class=nf>sha256msg1_manual</span><span class=p>(</span><span class=kr>__m128i</span> <span class=n>a</span><span class=p>,</span> <span class=kr>__m128i</span> <span class=n>b</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>x</span><span class=p>[</span><span class=mi>4</span><span class=p>],</span> <span class=n>y</span><span class=p>[</span><span class=mi>4</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=nf>_mm_storeu_si128</span><span class=p>((</span><span class=kr>__m128i</span><span class=o>*</span><span class=p>)</span><span class=n>x</span><span class=p>,</span> <span class=n>a</span><span class=p>);</span> <span class=c1>// split la valeur sur 128 bits en blocs de 32 bits.
+</span></span></span><span class=line><span class=cl><span class=c1></span>    <span class=nf>_mm_storeu_si128</span><span class=p>((</span><span class=kr>__m128i</span><span class=o>*</span><span class=p>)</span><span class=n>y</span><span class=p>,</span> <span class=n>b</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>r</span><span class=p>[</span><span class=mi>4</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span> <span class=o>=</span> <span class=nf>sigma0</span><span class=p>(</span><span class=n>x</span><span class=p>[</span><span class=mi>1</span><span class=p>])</span> <span class=o>+</span> <span class=n>x</span><span class=p>[</span><span class=mi>0</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span> <span class=o>=</span> <span class=nf>sigma0</span><span class=p>(</span><span class=n>x</span><span class=p>[</span><span class=mi>2</span><span class=p>])</span> <span class=o>+</span> <span class=n>x</span><span class=p>[</span><span class=mi>1</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=p>[</span><span class=mi>2</span><span class=p>]</span> <span class=o>=</span> <span class=nf>sigma0</span><span class=p>(</span><span class=n>x</span><span class=p>[</span><span class=mi>3</span><span class=p>])</span> <span class=o>+</span> <span class=n>x</span><span class=p>[</span><span class=mi>2</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=p>[</span><span class=mi>3</span><span class=p>]</span> <span class=o>=</span> <span class=nf>sigma0</span><span class=p>(</span><span class=n>y</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span> <span class=o>+</span> <span class=n>x</span><span class=p>[</span><span class=mi>3</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>_mm_set_epi32</span><span class=p>(</span><span class=n>r</span><span class=p>[</span><span class=mi>3</span><span class=p>],</span> <span class=n>r</span><span class=p>[</span><span class=mi>2</span><span class=p>],</span> <span class=n>r</span><span class=p>[</span><span class=mi>1</span><span class=p>],</span> <span class=n>r</span><span class=p>[</span><span class=mi>0</span><span class=p>]);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>print_xmm</span><span class=p>(</span><span class=kr>__m128i</span> <span class=n>v</span><span class=p>,</span> <span class=k>const</span> <span class=kt>char</span><span class=o>*</span> <span class=n>label</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint8_t</span> <span class=n>bytes</span><span class=p>[</span><span class=mi>16</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=nf>_mm_storeu_si128</span><span class=p>((</span><span class=kr>__m128i</span><span class=o>*</span><span class=p>)</span><span class=n>bytes</span><span class=p>,</span> <span class=n>v</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>printf</span><span class=p>(</span><span class=s>&#34;%s: 0x&#34;</span><span class=p>,</span> <span class=n>label</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=p>(</span><span class=kt>int</span> <span class=n>i</span> <span class=o>=</span> <span class=mi>15</span><span class=p>;</span> <span class=n>i</span> <span class=o>&gt;=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>i</span><span class=o>--</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>printf</span><span class=p>(</span><span class=s>&#34;%02X&#34;</span><span class=p>,</span> <span class=n>bytes</span><span class=p>[</span><span class=n>i</span><span class=p>]);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=nf>printf</span><span class=p>(</span><span class=s>&#34;</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>main</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=cm>/*
+</span></span></span><span class=line><span class=cl><span class=cm>    on vient tester que notre implémentation retourne bien les mêmes résultats
+</span></span></span><span class=line><span class=cl><span class=cm>    que l&#39;instruction AVX
+</span></span></span><span class=line><span class=cl><span class=cm>    */</span>
+</span></span><span class=line><span class=cl>    <span class=kr>__m128i</span> <span class=n>xmm0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kr>__m128i</span> <span class=n>xmm6</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>xmm0</span> <span class=o>=</span> <span class=nf>_mm_set_epi32</span><span class=p>(</span><span class=mh>0x45454545</span><span class=p>,</span> <span class=mh>0x44444444</span><span class=p>,</span> <span class=mh>0x42424242</span><span class=p>,</span> <span class=mh>0x41414141</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=n>xmm6</span> <span class=o>=</span> <span class=nf>_mm_set_epi32</span><span class=p>(</span><span class=mh>0x38373635</span><span class=p>,</span> <span class=mh>0x34333231</span><span class=p>,</span> <span class=mh>0x48474645</span><span class=p>,</span> <span class=mh>0x44434241</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=n>xmm0</span> <span class=o>=</span> <span class=nf>sha256msg1_manual</span><span class=p>(</span><span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm6</span><span class=p>);</span> <span class=c1>// implém custom
+</span></span></span><span class=line><span class=cl><span class=c1></span>    <span class=nf>print_xmm</span><span class=p>(</span><span class=n>xmm0</span><span class=p>,</span> <span class=s>&#34;sha256msg1 made home&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>xmm0</span> <span class=o>=</span> <span class=nf>_mm_set_epi32</span><span class=p>(</span><span class=mh>0x45454545</span><span class=p>,</span> <span class=mh>0x44444444</span><span class=p>,</span> <span class=mh>0x42424242</span><span class=p>,</span> <span class=mh>0x41414141</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=n>xmm6</span> <span class=o>=</span> <span class=nf>_mm_set_epi32</span><span class=p>(</span><span class=mh>0x38373635</span><span class=p>,</span> <span class=mh>0x34333231</span><span class=p>,</span> <span class=mh>0x48474645</span><span class=p>,</span> <span class=mh>0x44434241</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=n>xmm0</span> <span class=o>=</span> <span class=nf>_mm_sha256msg1_epu32</span><span class=p>(</span><span class=n>xmm0</span><span class=p>,</span> <span class=n>xmm6</span><span class=p>);</span> <span class=c1>// instruction AVX
+</span></span></span><span class=line><span class=cl><span class=c1></span>    <span class=nf>print_xmm</span><span class=p>(</span><span class=n>xmm0</span><span class=p>,</span> <span class=s>&#34;sha256msg1 official&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>En compilant et exécutant le code de test, on peut vérifier que notre implémentation de sha256msg1 est correcte :</p><pre tabindex=0><code>╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille/tests
+╰─➤  gcc -mavx -msha test.c -o test
+╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille/tests
+╰─➤  ./test
+sha256msg1 made home: 0x9FD6052117B7B7B7D35353535D9D9D9D
+sha256msg1 official: 0x9FD6052117B7B7B7D35353535D9D9D9D
+</code></pre><h3 id=compréhension-de-lalgorithme>Compréhension de l&rsquo;algorithme<a hidden class=anchor aria-hidden=true href=#compréhension-de-lalgorithme>#</a></h3><p>Il faut maintenant comprendre comment sont utilisées ces deux instructions.</p><p><img loading=lazy src=/img/posts/fcsc2025-chatouille/deadbrain.jpg alt></p><p>Heureusement, après un long moment à contempler cette fonction les yeux dans le vide, j&rsquo;ai fini par repérer un pattern. En effet, la fonction peut être divisé en bloc de 8 appels à <code>vpshufd</code> et 8 appels à <code>sha256msg1</code>.</p><p>Si l&rsquo;on prend ce premier bloc, on se rend compte que celui-ci prend 2 bloc de <code>128</code> bits de notre entrée utilisateur et va ensuite appliquer 8 <code>vpshufd</code> puis effectuer 8 <code>sha256msg1</code> avec chacun des outputs du vpshufd.</p><p>Voici une partie simplifiée et commenté d&rsquo;un bloc du shellcode.</p><pre tabindex=0><code>// récupère d2 blocs de 16 octets
+vmovdqu xmm6, xmmword ptr [rdi]
+vmovdqu xmm0, xmmword ptr [rdi+10h]
+
+// applique les transformations sur RDI
+vpshufd xmm1, xmm6, 39h
+vpshufd xmm2, xmm1, 39h
+vpshufd xmm3, xmm2, 39h
+vpshufd xmm4, xmm3, 39h
+vpshufd xmm5, xmm4, 39h
+vpshufd xmm7, xmm5, 39h
+vpshufd xmm8, xmm7, 39h
+vpshufd xmm9, xmm8, 39h
+
+// effectue 8 sha256msg1 sur xmm0 avec les transfo précédentes
+sha256msg1 xmm0, xmm6
+sha256msg1 xmm0, xmm1
+sha256msg1 xmm0, xmm2
+sha256msg1 xmm0, xmm3
+sha256msg1 xmm0, xmm4
+sha256msg1 xmm0, xmm5
+sha256msg1 xmm0, xmm7
+sha256msg1 xmm0, xmm8
+</code></pre><p>Ce bloc est ensuite réapliqué pour chaque bloc de 16 octets de notre entré utilisateur avec cette fois le résultat du bloc précédent comme deuxième opérande pour <code>sha256msg1</code>.</p><p>Voici un schéma illustrant les 8 premiers blocs :</p><p><img loading=lazy src=/img/posts/fcsc2025-chatouille/first_block.png alt="schéma premiers blocs"></p><p>La sortie de chaque bloc (en rose) sert comme entrée à au prochain bloc.</p><p>Mais une fois que l&rsquo;on a itéré sur toute notre entrée utilisateur, comment cela se passe-t-il ensuite ?</p><p>Et bien c&rsquo;est tout simple (j&rsquo;ai mis au moins 2h à comprendre), le prochain bloc prend en deuxième entrée le résultat du bloc <code>n-8</code>.</p><p><img loading=lazy src=/img/posts/fcsc2025-chatouille/multiple_block.png alt="schéma sur plusieurs blocs"></p><p>Et l&rsquo;on va appliqué la même opération beaucoup de fois sur nos blocs jusqu&rsquo;a la fin du shellcode.</p><p>Arrivé à la fin du shellcode, la sortie des 8 derniers blocs va être xoré avec des valeurs sur 128 bits. Afin que le shellcode retourne 0, il faut que les 8 derniers blocs soient égaux aux 8 valeurs par lesquelles ils sont xoré.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=n>known_values</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x27E2993E7DDB9BCE388260CED6DF027E</span><span class=p>,</span> <span class=c1># dernier bloc</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0xAB509EB2143D13035F595D84BF7A1DBF</span><span class=p>,</span> <span class=c1># avant dernier</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x67172D37B77DAEFE99DB1D1FF04FBED5</span><span class=p>,</span> <span class=c1># avant avant dernier</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x4325F6DFDC17B3D93A437A2FD174192F</span><span class=p>,</span> <span class=c1># etc.</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0xB6CEB5305C48B5C137C1EEC542DD7AB5</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x36DE1DABA4D0C410A59ABC08D9270088</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x4FB98600728660ADC7EB49ABF5F4BB97</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0xBD7A8C92FE4A7BD964145C1B415E27FE</span>
+</span></span><span class=line><span class=cl><span class=p>]</span>
+</span></span></code></pre></div><p>Voici une illustration du dernier bloc, en jaune nous pouvons retrouver les valeurs connues (et en bleu les inconnues, si jamais le point d&rsquo;interrogation n&rsquo;était pas assez explicite).</p><p><img loading=lazy src=/img/posts/fcsc2025-chatouille/last_block.png alt="last blocks"></p><p>On peut donc supposer que pour résoudre ce challenge il va falloir partir des 8 dernières valeurs connues et remonter les blocs jusqu&rsquo;a arriver au premier.</p><p>Pour se faire, j&rsquo;ai implémenter nos blocs en python afin de les résoudres à l&rsquo;aide de z3.</p><h3 id=résolution-avec-z3>Résolution avec z3<a hidden class=anchor aria-hidden=true href=#résolution-avec-z3>#</a></h3><p>Voici mon implémentation d&rsquo;un bloc avec z3 en python :</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=kn>from</span> <span class=nn>z3</span> <span class=kn>import</span> <span class=o>*</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>S0</span><span class=p>(</span><span class=n>x</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>RotateRight</span><span class=p>(</span><span class=n>x</span><span class=p>,</span><span class=mi>7</span><span class=p>)</span> <span class=o>^</span> <span class=n>RotateRight</span><span class=p>(</span><span class=n>x</span><span class=p>,</span><span class=mi>18</span><span class=p>)</span> <span class=o>^</span> <span class=n>LShR</span><span class=p>(</span><span class=n>x</span><span class=p>,</span><span class=mi>3</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>sha256msg1</span><span class=p>(</span><span class=n>src1</span><span class=p>,</span> <span class=n>src2</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=n>X</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>31</span><span class=p>,</span>  <span class=mi>0</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>63</span><span class=p>,</span> <span class=mi>32</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>95</span><span class=p>,</span> <span class=mi>64</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>127</span><span class=p>,</span><span class=mi>96</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>    <span class=p>]</span>
+</span></span><span class=line><span class=cl>    <span class=n>Y</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>31</span><span class=p>,</span>  <span class=mi>0</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>63</span><span class=p>,</span> <span class=mi>32</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>95</span><span class=p>,</span> <span class=mi>64</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>127</span><span class=p>,</span><span class=mi>96</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>    <span class=p>]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>mask32</span> <span class=o>=</span> <span class=n>BitVecVal</span><span class=p>(</span><span class=mh>0xFFFFFFFF</span><span class=p>,</span> <span class=mi>32</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=n>R0</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>X</span><span class=p>[</span><span class=mi>1</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>    <span class=n>R1</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>X</span><span class=p>[</span><span class=mi>2</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>1</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>    <span class=n>R2</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>X</span><span class=p>[</span><span class=mi>3</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>2</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>    <span class=n>R3</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>Y</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>3</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>Concat</span><span class=p>(</span><span class=n>R3</span><span class=p>,</span> <span class=n>R2</span><span class=p>,</span> <span class=n>R1</span><span class=p>,</span> <span class=n>R0</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>block</span><span class=p>(</span><span class=n>src1</span><span class=p>,</span> <span class=n>src2</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=n>out</span> <span class=o>=</span> <span class=n>src1</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>8</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>out</span> <span class=o>=</span> <span class=n>sha256msg1</span><span class=p>(</span><span class=n>out</span><span class=p>,</span> <span class=n>RotateRight</span><span class=p>(</span><span class=n>src2</span><span class=p>,</span> <span class=mi>32</span><span class=o>*</span><span class=n>i</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>out</span>
+</span></span></code></pre></div><p>On peut ainsi retrouver notre première inconue en partant de la fin en appelant le code suivant :</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=n>s</span> <span class=o>=</span> <span class=n>Solver</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>s</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>block</span><span class=p>(</span><span class=n>BitVec</span><span class=p>(</span><span class=s1>&#39;x&#39;</span><span class=p>,</span> <span class=mi>128</span><span class=p>),</span> <span class=n>BitVecVal</span><span class=p>(</span><span class=mh>0xAB509EB2143D13035F595D84BF7A1DBF</span><span class=p>,</span> <span class=mi>128</span><span class=p>))</span> <span class=o>==</span>  <span class=n>BitVecVal</span><span class=p>(</span><span class=mh>0x27E2993E7DDB9BCE388260CED6DF027E</span><span class=p>,</span> <span class=mi>128</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=n>s</span><span class=o>.</span><span class=n>check</span><span class=p>()</span> <span class=o>==</span> <span class=n>sat</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>  <span class=nb>print</span><span class=p>(</span><span class=n>s</span><span class=o>.</span><span class=n>model</span><span class=p>())</span>
+</span></span><span class=line><span class=cl><span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>  <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;no solution found ...&#34;</span><span class=p>)</span>
+</span></span></code></pre></div><p>Maintenant il nous reste plus qu&rsquo;a remonter les blocs jusqu&rsquo;a trouver notre valeur initiale !</p><p>Pour ça on va compter le nombre de fois qu&rsquo;apparait l&rsquo;instruction <code>sha256msg1</code> dans le shellcode.</p><pre tabindex=0><code>╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille
+╰─➤  cat shellcode2.txt | grep sha256msg1 | wc -l
+2040
+</code></pre><p>Sachant que chaque bloc utilise 8 fois l&rsquo;instruction on peut donc diviser par 8 ce qui nous donne 255 blocs à remonter.</p><p>Voici donc le script final :</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=kn>from</span> <span class=nn>z3</span> <span class=kn>import</span> <span class=o>*</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>S0</span><span class=p>(</span><span class=n>x</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>RotateRight</span><span class=p>(</span><span class=n>x</span><span class=p>,</span><span class=mi>7</span><span class=p>)</span> <span class=o>^</span> <span class=n>RotateRight</span><span class=p>(</span><span class=n>x</span><span class=p>,</span><span class=mi>18</span><span class=p>)</span> <span class=o>^</span> <span class=n>LShR</span><span class=p>(</span><span class=n>x</span><span class=p>,</span><span class=mi>3</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>sha256msg1</span><span class=p>(</span><span class=n>src1</span><span class=p>,</span> <span class=n>src2</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=n>X</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>31</span><span class=p>,</span>  <span class=mi>0</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>  <span class=c1># X[0]</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>63</span><span class=p>,</span> <span class=mi>32</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>  <span class=c1># X[1]</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>95</span><span class=p>,</span> <span class=mi>64</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>  <span class=c1># X[2]</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>127</span><span class=p>,</span><span class=mi>96</span><span class=p>,</span>  <span class=n>src1</span><span class=p>),</span>  <span class=c1># X[3]</span>
+</span></span><span class=line><span class=cl>    <span class=p>]</span>
+</span></span><span class=line><span class=cl>    <span class=n>Y</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>31</span><span class=p>,</span>  <span class=mi>0</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>  <span class=c1># Y[0]</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>63</span><span class=p>,</span> <span class=mi>32</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>  <span class=c1># Y[1]</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>95</span><span class=p>,</span> <span class=mi>64</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>  <span class=c1># Y[2]</span>
+</span></span><span class=line><span class=cl>        <span class=n>Extract</span><span class=p>(</span><span class=mi>127</span><span class=p>,</span><span class=mi>96</span><span class=p>,</span>  <span class=n>src2</span><span class=p>),</span>  <span class=c1># Y[3]</span>
+</span></span><span class=line><span class=cl>    <span class=p>]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>mask32</span> <span class=o>=</span> <span class=n>BitVecVal</span><span class=p>(</span><span class=mh>0xFFFFFFFF</span><span class=p>,</span> <span class=mi>32</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=n>R0</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>X</span><span class=p>[</span><span class=mi>1</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>    <span class=n>R1</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>X</span><span class=p>[</span><span class=mi>2</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>1</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>    <span class=n>R2</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>X</span><span class=p>[</span><span class=mi>3</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>2</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>    <span class=n>R3</span> <span class=o>=</span> <span class=p>(</span><span class=n>S0</span><span class=p>(</span><span class=n>Y</span><span class=p>[</span><span class=mi>0</span><span class=p>])</span> <span class=o>+</span> <span class=n>X</span><span class=p>[</span><span class=mi>3</span><span class=p>])</span> <span class=o>&amp;</span> <span class=n>mask32</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>Concat</span><span class=p>(</span><span class=n>R3</span><span class=p>,</span> <span class=n>R2</span><span class=p>,</span> <span class=n>R1</span><span class=p>,</span> <span class=n>R0</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>block</span><span class=p>(</span><span class=n>src1</span><span class=p>,</span> <span class=n>src2</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=n>out</span> <span class=o>=</span> <span class=n>src1</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>8</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>out</span> <span class=o>=</span> <span class=n>sha256msg1</span><span class=p>(</span><span class=n>out</span><span class=p>,</span> <span class=n>RotateRight</span><span class=p>(</span><span class=n>src2</span><span class=p>,</span> <span class=mi>32</span><span class=o>*</span><span class=n>i</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>out</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>round_values</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x27E2993E7DDB9BCE388260CED6DF027E</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0xAB509EB2143D13035F595D84BF7A1DBF</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x67172D37B77DAEFE99DB1D1FF04FBED5</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x4325F6DFDC17B3D93A437A2FD174192F</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0xB6CEB5305C48B5C137C1EEC542DD7AB5</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x36DE1DABA4D0C410A59ABC08D9270088</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0x4FB98600728660ADC7EB49ABF5F4BB97</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=mh>0xBD7A8C92FE4A7BD964145C1B415E27FE</span><span class=p>,</span>
+</span></span><span class=line><span class=cl><span class=p>]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>255</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=n>s</span> <span class=o>=</span> <span class=n>Solver</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>x</span> <span class=o>=</span> <span class=n>BitVec</span><span class=p>(</span><span class=s1>&#39;x&#39;</span><span class=p>,</span> <span class=mi>128</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=n>y</span> <span class=o>=</span> <span class=n>BitVecVal</span><span class=p>(</span><span class=n>round_values</span><span class=p>[(</span><span class=n>i</span> <span class=o>+</span> <span class=mi>1</span><span class=p>)</span> <span class=o>%</span> <span class=nb>len</span><span class=p>(</span><span class=n>round_values</span><span class=p>)],</span> <span class=mi>128</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>s</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>block</span><span class=p>(</span><span class=n>x</span><span class=p>,</span> <span class=n>y</span><span class=p>)</span> <span class=o>==</span> <span class=n>BitVecVal</span><span class=p>(</span><span class=n>round_values</span><span class=p>[</span><span class=n>i</span> <span class=o>%</span> <span class=nb>len</span><span class=p>(</span><span class=n>round_values</span><span class=p>)],</span> <span class=mi>128</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=n>s</span><span class=o>.</span><span class=n>check</span><span class=p>()</span> <span class=o>==</span> <span class=n>sat</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=n>m</span> <span class=o>=</span> <span class=n>s</span><span class=o>.</span><span class=n>model</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=n>round_values</span><span class=p>[</span><span class=n>i</span> <span class=o>%</span> <span class=nb>len</span><span class=p>(</span><span class=n>round_values</span><span class=p>)]</span> <span class=o>=</span> <span class=n>m</span><span class=p>[</span><span class=n>x</span><span class=p>]</span><span class=o>.</span><span class=n>as_long</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;no solution found ...&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>exit</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nb>print</span><span class=p>(</span><span class=sa>b</span><span class=s1>&#39;&#39;</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>x</span><span class=o>.</span><span class=n>to_bytes</span><span class=p>(</span><span class=mi>16</span><span class=p>,</span> <span class=s2>&#34;little&#34;</span><span class=p>)</span> <span class=k>for</span> <span class=n>x</span> <span class=ow>in</span> <span class=n>round_values</span><span class=p>[::</span><span class=o>-</span><span class=mi>1</span><span class=p>]))</span>
+</span></span></code></pre></div><p>et on obtiens notre flag en sortie !</p><pre tabindex=0><code>╭─trikkss@arch-linux ~/ctf/FCSC-2025/reverse/chatouille
+╰─➤  python3 final-solve.py
+b&#39;FCSC{Shoh4IeFohmee1oichoo5iujohze2riPuuroochoh3vi0aGai5ae5aithooph2wohquai2takaeng9eeF3ue8QuooT2shiege5ee5ahL1vanoAnZ}\x80\x00\x00\x00\x00\x00\x00\x00\x03\xb0&#39;
+</code></pre></div><footer class=post-footer><ul class=post-tags><li><a href=https://trikkss.github.io/tags/reverse-engineering/>Reverse Engineering</a></li><li><a href=https://trikkss.github.io/tags/linux/>Linux</a></li><li><a href=https://trikkss.github.io/tags/z3/>Z3</a></li><li><a href=https://trikkss.github.io/tags/avx/>AVX</a></li><li><a href=https://trikkss.github.io/tags/sha256/>Sha256</a></li></ul><nav class=paginav><a class=next href=https://trikkss.github.io/posts/fcsc2025_fcsclang/><span class=title>Next »</span><br><span>FCSC 2025 - fcsclang</span></a></nav></footer></article></main><footer class=footer><span>&copy; 2025 <a href=https://trikkss.github.io/>TRIKKSS Blog</a></span>
+<span>Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+        <a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top aria-label="go to top" title="Go to Top (Alt + G)" class=top-link id=top-link accesskey=g><svg viewBox="0 0 12 6" fill="currentcolor"><path d="M12 6H0l6-6z"/></svg>
+</a><script>let menu=document.getElementById("menu");menu&&(menu.scrollLeft=localStorage.getItem("menu-scroll-position"),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)}),document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var t=this.getAttribute("href").substr(1);window.matchMedia("(prefers-reduced-motion: reduce)").matches?document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView({behavior:"smooth"}),t==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${t}`)})})</script><script>var mybutton=document.getElementById("top-link");window.onscroll=function(){document.body.scrollTop>800||document.documentElement.scrollTop>800?(mybutton.style.visibility="visible",mybutton.style.opacity="1"):(mybutton.style.visibility="hidden",mybutton.style.opacity="0")}</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{document.body.className.includes("dark")?(document.body.classList.remove("dark"),localStorage.setItem("pref-theme","light")):(document.body.classList.add("dark"),localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

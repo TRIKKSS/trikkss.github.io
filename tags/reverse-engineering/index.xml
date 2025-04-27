@@ -1,16 +1,34 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
-    <title>Reverse engineering on TRIKKSS Blog</title>
+    <title>Reverse Engineering on TRIKKSS Blog</title>
     <link>https://trikkss.github.io/tags/reverse-engineering/</link>
-    <description>Recent content in Reverse engineering on TRIKKSS Blog</description>
+    <description>Recent content in Reverse Engineering on TRIKKSS Blog</description>
     <image>
       <url>https://trikkss.github.io/img/pfp.png</url>
       <link>https://trikkss.github.io/img/pfp.png</link>
     </image>
     <generator>Hugo -- gohugo.io</generator>
     <language>en</language>
-    <lastBuildDate>Mon, 15 Apr 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://trikkss.github.io/tags/reverse-engineering/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sun, 27 Apr 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://trikkss.github.io/tags/reverse-engineering/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>FCSC 2025 - Chatouille</title>
+      <link>https://trikkss.github.io/posts/fcsc2025_chatouille/</link>
+      <pubDate>Sun, 27 Apr 2025 00:00:00 +0000</pubDate>
+      
+      <guid>https://trikkss.github.io/posts/fcsc2025_chatouille/</guid>
+      <description>Write up du challenge Chatouille</description>
+    </item>
+    
+    <item>
+      <title>FCSC 2025 - fcsclang</title>
+      <link>https://trikkss.github.io/posts/fcsc2025_fcsclang/</link>
+      <pubDate>Sun, 27 Apr 2025 00:00:00 +0000</pubDate>
+      
+      <guid>https://trikkss.github.io/posts/fcsc2025_fcsclang/</guid>
+      <description>Write up du challenge fcsclang</description>
+    </item>
+    
     <item>
       <title>FCSC 2024 - TV Hacks 1/2</title>
       <link>https://trikkss.github.io/posts/fcsc2024_tv-hacks1/</link>

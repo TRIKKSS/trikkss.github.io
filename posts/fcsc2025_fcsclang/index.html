@@ -1,0 +1,878 @@
+<!doctype html><html lang=en dir=auto><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>FCSC 2025 - fcsclang | TRIKKSS Blog</title>
+<meta name=keywords content="Reverse engineering,Linux,z3,Sudoku,VM,tree-sitter"><meta name=description content="Write up du challenge fcsclang"><meta name=author content="TRIKKSS"><link rel=canonical href=https://trikkss.github.io/posts/fcsc2025_fcsclang/><link crossorigin=anonymous href=/assets/css/stylesheet.css rel="preload stylesheet" as=style><script defer crossorigin=anonymous src=/assets/js/highlight.js onload=hljs.initHighlightingOnLoad()></script><link rel=icon href=https://trikkss.github.io/img/pfp.png><link rel=icon type=image/png sizes=16x16 href=https://trikkss.github.io/img/pfp.png><link rel=icon type=image/png sizes=32x32 href=https://trikkss.github.io/img/pfp.png><link rel=apple-touch-icon href=https://trikkss.github.io/img/pfp.png><link rel=mask-icon href=https://trikkss.github.io/img/pfp.png><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://trikkss.github.io/posts/fcsc2025_fcsclang/><noscript><style>#theme-toggle,.top-link{display:none}</style></noscript><meta property="og:title" content="FCSC 2025 - fcsclang"><meta property="og:description" content="Write up du challenge fcsclang"><meta property="og:type" content="article"><meta property="og:url" content="https://trikkss.github.io/posts/fcsc2025_fcsclang/"><meta property="og:image" content="https://trikkss.github.io/img/pfp.png"><meta property="article:section" content="posts"><meta property="article:published_time" content="2025-04-27T00:00:00+00:00"><meta property="article:modified_time" content="2025-04-27T00:00:00+00:00"><meta property="og:site_name" content="TRIKKSS Blog"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://trikkss.github.io/img/pfp.png"><meta name=twitter:title content="FCSC 2025 - fcsclang"><meta name=twitter:description content="Write up du challenge fcsclang"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Posts","item":"https://trikkss.github.io/posts/"},{"@type":"ListItem","position":2,"name":"FCSC 2025 - fcsclang","item":"https://trikkss.github.io/posts/fcsc2025_fcsclang/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"FCSC 2025 - fcsclang","name":"FCSC 2025 - fcsclang","description":"Write up du challenge fcsclang","keywords":["Reverse engineering","Linux","z3","Sudoku","VM","tree-sitter"],"articleBody":"vous pouvez retrouver les fichiers joint avec le chall ici\nDécouverte du challenge Dans ce challenge de reverse, on tombait sur une VM un peu spéciale, fonctionnant à l’aide de tree-sitter.\nTree-sitter est une bibliothèque qui sert à analyser du code source de manière rapide et structurée.\nElle transforme un fichier de code en un arbre syntaxique (AST) facilement parcourable, avec des mises à jour incrémentales en temps réel, idéal pour des outils comme les éditeurs de texte ou l’analyse de code.\nSource : ChatGPT\nDans ce writeup, on va voir comment résoudre un challenge de reverse de VM sans nécessairement avoir besoin de comprendre le fonctionnement de celle-ci.\nL’archive fournie avec le challenge nous donne 4 fichiers :\nun ELF fcsclang une lib partagée libfcsclang.so un programme pour la vm program.fcsc un fichier Dockerfile un fichier run.sh permettant de lancer le docker Analyse du binaire Lorsque l’on ouvre la fonction principale du binaire on observe que celui-ci prend en argument un fichier contenant un programme pour la VM, initialise un parser et va parser notre programme à l’aide tree-sitter.\n__int64 __fastcall main(__int64 a1, char **a2, char **a3) { __int64 v4; // rax int v5; // eax size_t v6; // rax _QWORD v7[4]; // [rsp+10h] [rbp-F0h] BYREF _BYTE v8[8]; // [rsp+30h] [rbp-D0h] BYREF unsigned int v9; // [rsp+38h] [rbp-C8h] stat buf; // [rsp+40h] [rbp-C0h] BYREF __int64 v11; // [rsp+D8h] [rbp-28h] unsigned __int64 st_size; // [rsp+E0h] [rbp-20h] FILE *stream; // [rsp+E8h] [rbp-18h] __int64 v14; // [rsp+F0h] [rbp-10h] unsigned __int64 i; // [rsp+F8h] [rbp-8h] if ( (int)a1 \u003e 1 ) { v14 = ts_parser_new(a1, a2, a3); v4 = tree_sitter_fcsclang(); ts_parser_set_language(v14, v4); stream = fopen(a2[1], \"r\"); if ( stream ) { v5 = fileno(stream); fstat(v5, \u0026buf); st_size = buf.st_size; program = do_malloc(buf.st_size); for ( i = 0LL; i \u003c st_size; i += v6 ) v6 = fread(program, 1uLL, st_size - i, stream); v11 = ts_parser_parse_string(v14, 0LL, program, (unsigned int)st_size); if ( v11 ) { qword_7150 = (__int64)sub_1561(); qword_7158 = sub_3A01(); sub_1329(v11, v7); exec_instr((__int64)v7, (__int64)v8); sub_1657(qword_7150); sub_3A52((_QWORD *)qword_7158); free(program); ts_tree_delete(v11); ts_parser_delete(v14); return v9; } else { return 0xFFFFFFFFLL; } } else { return 0xFFFFFFFFLL; } } else { printf(\"Usage: %s \\n\", *a2); return 0xFFFFFFFFLL; } } Lorsque l’on lance le binaire, celui-ci se lance mais rien ne semble se passer. Je décide donc de lancer un ltrace avec celui-ci afin d’avoir une idée de ce qu’il se passe. Pour ce faire, on modifie l’entrypoint de notre Dockerfile par [\"ltrace\", \"./fcsclang\", \"program.fcsc\"] et on relance notre programme.\nLa trace d’exécution générée par ltrace est conséquente, on va donc pipe celle-ci vers vscode.\nrun.sh 2\u003e\u00261 | code - Si nous jetons un oeil à la trace d’exécution, nous pouvoir voir l’initialisation du parser\nts_parser_new(3, 0x7ffcd3821168, 0x7ffcd3821188, 0x63b3a1e11db8) = 0x63b3b18622a0 tree_sitter_fcsclang(0x63b3b1862a40, 232, 1, 0) = 0x715c8c6a0d80 ts_parser_set_language(0x63b3b18622a0, 0x715c8c6a0d80, 0x715c8c6a0d80, 0) = 1 fopen(\"program.fcsc\", \"r\") = 0x63b3b1862ea0 Et surtout nous pouvons voir qu’il prend notre entrée et va effectuer un atoi dessus. Cette fonction permet de convertir une string en entier.\ngetline(\"aaaaaaa\\n\", 120, 0x715c8c3008e0) = 8 atoi(0x63b3b18cf140, 0xa61616161616161, 1, 0xa61616161616161) = 0 En parcourant rapidemment les fonctions, on trouve la fonction que j’ai renommé exec_instr qui semble intéressante. Celle-ci contient un switch-case semblant contenir les différentes instructions de la machine virtuelle. Certaines instructions ont des noms explicites, tandis que d’autres, qui commencent par undocumented_, sont beaucoup moins parlantes.\n__int64 __fastcall exec_instr(__int64 a1, __int64 a2) { char *s1; // [rsp+18h] [rbp-8h] if ( (unsigned __int8)sub_1A2C(a1) ) { fwrite(\"Syntax error\\n\", 1uLL, 0xDuLL, stderr); exit(1); } s1 = (char *)get_node_type(a1); if ( !strcmp(s1, \"function_definition\") ) return sub_30AF(a1, a2); if ( !strcmp(s1, \"number\") ) return sub_1C3A(a1, a2); if ( !strcmp(s1, \"undocumented_732293a7c7094ffd\") ) return set_0(a1, a2); if ( !strcmp(s1, \"undocumented_f9bfceb10223dcd6\") ) return set_1(a1, a2); if ( !strcmp(s1, \"undocumented_d53cabc7357ff2a5\") ) return set_2(a1, a2); if ( !strcmp(s1, \"undocumented_210eb81a94b8b633\") ) return set_3(a1, a2); if ( !strcmp(s1, \"undocumented_c589a8f3aaff75f7\") ) return set_4(a1, a2); if ( !strcmp(s1, \"undocumented_ac7469dafc6e9c77\") ) return set_5(a1, a2); if ( !strcmp(s1, \"undocumented_8212463fe42cc213\") ) return set_6(a1, a2); if ( !strcmp(s1, \"undocumented_791df7d09856e81f\") ) return set_7(a1, a2); if ( !strcmp(s1, \"undocumented_db9dce746e821769\") ) return set_8(a1, a2); if ( !strcmp(s1, \"undocumented_ac3fcec30d0b6a40\") ) return set_9(a1, a2); if ( !strcmp(s1, \"str\") ) return get_string(a1, a2); if ( !strcmp(s1, \"array\") ) return get_array(a1, a2); if ( !strcmp(s1, \"identifier\") ) return sub_22FC(a1, a2); if ( !strcmp(s1, \"function_call\") ) return function_call(a1, a2); if ( !strcmp(s1, \"scope\") ) return sub_306B(a1, a2); if ( !strcmp(s1, \"lvalue\") ) return sub_2192(a1, a2); if ( !strcmp(s1, \"assign\") ) return assign(a1, a2); if ( !strcmp(s1, \"subscript\") ) return subscript(a1, a2); if ( !strcmp(s1, \"binexp\") ) return do_operation(a1, a2); if ( !strcmp(s1, \"unexp\") ) return do_unexp(a1, a2); if ( !strcmp(s1, \"undocumented_9bfdf82a969d10c2\") ) return get_user_input(a1, a2); if ( !strcmp(s1, \"undocumented_af0dbc52101afc49\") ) return maybe_a_printf(a1, a2); if ( !strcmp(s1, \"undocumented_0fe135eb8cd073ef\") ) return sub_2C3C(a1, a2); if ( !strcmp(s1, \"undocumented_48359b1cc713e5a1\") ) return sub_2CCD(a1, a2); if ( !strcmp(s1, \"undocumented_c44ff70e0a035b84\") ) return sub_2D91(a1, a2); return sub_1B7A(a1, a2); } On peut par exemple retrouver l’instruction undocumented_9bfdf82a969d10c2 qui fait un getline et un atoi, on peut donc en déduire que c’est cette fonction va lire notre entrée utilisateur.\ngetline(\u0026lineptr, \u0026n, stdin); v5 = atoi(lineptr); Reverse de la VM A partir de là, ma façon de procéder pour le reverse de VM est de chercher pour des instructions intéressantes et hook celles-ci afin de générer une trace d’exécution et potentiellement comprendre le programme en entrée sans avoir à comprendre le fonctionnement de la machine virtuelle. Je trouve donc la fonction que j’ai renommé do_operation() qui semble particulièrement intéressante.\n__int64 __fastcall do_operation(_QWORD *a1, __int64 a2) { _BOOL4 v3; // eax int v4; // [rsp+10h] [rbp-90h] BYREF __int64 v5; // [rsp+18h] [rbp-88h] int v6; // [rsp+20h] [rbp-80h] BYREF __int64 v7; // [rsp+28h] [rbp-78h] _QWORD v8[4]; // [rsp+30h] [rbp-70h] BYREF _QWORD v9[4]; // [rsp+50h] [rbp-50h] BYREF _QWORD v10[5]; // [rsp+70h] [rbp-30h] BYREF char *s1; // [rsp+98h] [rbp-8h] search_node_child_by_field_name(a1, \"op\", v10); search_node_child_by_field_name(v10, \"left\", v9); search_node_child_by_field_name(v10, \"right\", v8); exec_instr((__int64)v9, (__int64)\u0026v6); exec_instr((__int64)v8, (__int64)\u0026v4); s1 = (char *)get_node_type(v10); if ( v6 != 1 || v4 != 1 ) { fwrite(\"Invalid type\\n\", 1uLL, 0xDuLL, stderr); exit(1); } if ( !strcmp(s1, \"undocumented_46eb8e8b7b15c3d5\") ) return sub_3BF0((int)v5 + (int)v7, a2); if ( !strcmp(s1, \"undocumented_cfd09200be51d38f\") ) return sub_3BF0((int)v7 - (int)v5, a2); if ( !strcmp(s1, \"undocumented_b341f271c655aaee\") ) return sub_3BF0((int)v7 * (int)v5, a2); if ( !strcmp(s1, \"undocumented_956dd300d7424ff3\") ) return sub_3BF0(v7 == v5, a2); if ( !strcmp(s1, \"undocumented_0162f13a50afff09\") ) return sub_3BF0(v7 != v5, a2); if ( !strcmp(s1, \"undocumented_a91bdbbce9e82238\") ) return sub_3BF0((unsigned int)v7 \u003c (unsigned int)v5, a2); if ( !strcmp(s1, \"undocumented_589a700aed48e3a4\") ) return sub_3BF0((unsigned int)v5 \u003c (unsigned int)v7, a2); if ( !strcmp(s1, \"undocumented_2d5b46a88151170b\") ) return sub_3BF0((unsigned int)v5 \u003e= (unsigned int)v7, a2); if ( !strcmp(s1, \"undocumented_4c3cc3b8907e3db5\") ) return sub_3BF0((unsigned int)v7 \u003e= (unsigned int)v5, a2); if ( !strcmp(s1, \"undocumented_aa1bd5b44f53714d\") ) { v3 = v7 \u0026\u0026 v5; return sub_3BF0(v3, a2); } if ( !strcmp(s1, \"undocumented_0e772940f0fd3008\") ) { v3 = v7 || v5; return sub_3BF0(v3, a2); } if ( !strcmp(s1, \"undocumented_13932b8a4b1bd439\") ) return sub_3BF0((_DWORD)v7 \u003c\u003c v5, a2); if ( !strcmp(s1, \"undocumented_0cd2df8843187030\") ) return sub_3BF0((unsigned int)v7 \u003e\u003e v5, a2); if ( !strcmp(s1, \"undocumented_b858202486aecd0f\") ) return sub_3BF0((unsigned int)v5 | (unsigned int)v7, a2); if ( strcmp(s1, \"undocumented_24e094c9759dc06c\") ) { fwrite(\"Not implemented\\n\", 1uLL, 0x10uLL, stderr); exit(1); } return sub_3BF0((unsigned int)v5 \u0026 (unsigned int)v7, a2); } En effet, dans cette fonction se trouve un switch case pour différentes opérations mathématiques et binaire. Ce sera donc notre premier hook.\nJ’ai pour cela simplement utilisé un script gdb avec python. J’ai également exporté les symboles depuis IDA à l’aide de l’extension syms2elf.\nimport gdb class BreakDoOperation(gdb.Breakpoint): def __init__(self): super().__init__('*do_operation + 244', internal=False) def stop(self): try: rdi = gdb.parse_and_eval(\"$rdi\") char_ptr = rdi.cast(gdb.lookup_type(\"char\").pointer()) string = char_ptr.string() except Exception as e: print(f\"Unable to read string at $rdi: {e}\") v5 = gdb.parse_and_eval(\"*(int*)($rbp - 0x88)\") v7 = gdb.parse_and_eval(\"*(int*)($rbp - 0x78)\") if string == \"undocumented_46eb8e8b7b15c3d5\": print(f\"{v5} + {v7}\") elif string == \"undocumented_cfd09200be51d38f\": print(f\"{v7} - {v5}\") elif string == \"undocumented_b341f271c655aaee\": print(f\"{v7} * {v5}\") elif string == \"undocumented_956dd300d7424ff3\": print(f\"{v7} == {v5}\") elif string == \"undocumented_0162f13a50afff09\": print(f\"{v7} != {v5}\") elif string == \"undocumented_a91bdbbce9e82238\": print(f\"{v7} \u003c {v5}\") elif string == \"undocumented_589a700aed48e3a4\": print(f\"{v5} \u003c {v7}\") elif string == \"undocumented_2d5b46a88151170b\": print(f\"{v5} \u003e= {v7}\") elif string == \"undocumented_4c3cc3b8907e3db5\": print(f\"{v7} \u003e= {v5}\") elif string == \"undocumented_aa1bd5b44f53714d\": print(f\"{v7} \u0026\u0026 {v5}\") elif string == \"undocumented_0e772940f0fd3008\": print(f\"{v7} || {v5}\") elif string == \"undocumented_13932b8a4b1bd439\": print(f\"{v7} \u003c\u003c {v5}\") elif string == \"undocumented_0cd2df8843187030\": print(f\"{v7} \u003e\u003e {v5}\") elif string == \"undocumented_b858202486aecd0f\": print(f\"{v5} | {v7}\") elif string == \"undocumented_24e094c9759dc06c\": print(f\"{v5} \u0026 {v7}\") else: print(\"not implemented !!!!\") return False De plus, j’ai hooké les fonctions qui étaient “guessable” à partir de leur noms ou en survolant rapidemment leur code.\nfunction_names = [ \"do_unexp\", \"maybe_a_printf\", \"get_user_input\", \"function_call\", \"get_array\", \"get_string\", # j'ai renommé ces fonctions ainsi car elles semblaient mettre des valeurs de 0 à 9, peut être un push sur une stack ou un registre, je n'ai pas creusé mais ça nous permet d'avoir une idée dans notre trace. \"set_0\", \"set_1\", \"set_2\", \"set_3\", \"set_4\", \"set_5\", \"set_6\", \"set_7\", \"set_8\", \"set_9\" ] class FunctionBreakpoint(gdb.Breakpoint): def __init__(self, func_name): super().__init__(func_name, internal=False) self.func_name = func_name def stop(self): print(f\"executing {self.func_name}\") return False Maintenant si on relance le binaire avec le Dockerfile suivant :\nFROM debian:sid RUN apt update \u0026\u0026 apt install -y libtree-sitter-dev=0.22.6-6 ltrace gdb python3 COPY . /fcsclang WORKDIR /fcsclang ENV LD_LIBRARY_PATH . ENTRYPOINT [\"gdb\", \"-q\", \"-ex\", \"source gdb_do_operation_hook.py\", \"-ex\", \"run program.fcsc\", \"-ex\", \"quit\", \"fcsclang_symbols\"] On obtient en sortie une trace d’exécution gigantesque.\nOn peut tout de même voir que dans les premières instructions le programme semble stocker l’entrée utilisateur dans un tableau 9x9.\n0 \u003c 9 executing set_0 executing set_9 0 \u003c 9 executing get_user_input executing set_1 1 + 0 executing set_9 1 \u003c 9 executing get_user_input executing set_1 1 + 1 executing set_9 2 \u003c 9 executing get_user_input executing set_1 1 + 2 executing set_9 3 \u003c 9 executing get_user_input executing set_1 [...] Malheureusement, la trace d’exécution étant beaucoup trop grande, il est très compliqué de comprendre son fonctionnement. Heureusement, le programme semble utiliser des fonctions ! Dans le switch case permettant de gérer les instructions de la machine virtuelle on retrouve un appel très intéressant : function_call\nOn va donc créer 2 hook, un function_call et un function_end, ainsi il sera possible de séparer les traces d’executions par fonction et de grandement simplifier le processus de reverse.\nclass BreakFunctionCall(gdb.Breakpoint): def __init__(self): super().__init__('*function_call + 66', internal=False) def stop(self): try: rax = gdb.parse_and_eval(\"$rax\") char_ptr = rax.cast(gdb.lookup_type(\"char\").pointer()) string = char_ptr.string() print(f\"calling function {string}\") except Exception as e: print(f\"Unable to read string at $rdi: {e}\") class ExitingFunctionCall(gdb.Breakpoint): def __init__(self): super().__init__('*function_call + 308', internal=False) def stop(self): try: rax = gdb.parse_and_eval(\"$rax\") char_ptr = rax.cast(gdb.lookup_type(\"char\").pointer()) string = char_ptr.string() print(f\"end of function {string}\") except Exception as e: print(f\"Unable to read string at $rdi: {e}\") Un dernier hook qui me semble important est le hook de subscript, celui-ci va nous permettre de voir quel element d’une array est lu.\nclass BreakSubscript(gdb.Breakpoint): def __init__(self): super().__init__(\"*subscript + 221\", internal=False) def stop(self): rdx = gdb.parse_and_eval(\"$rdx\") print(f\"get array[{rdx}]\") return False Voici le script complet permettant de générer notre trace d’exécution :\nimport gdb class BreakFunctionCall(gdb.Breakpoint): def __init__(self): super().__init__('*function_call + 66', internal=False) def stop(self): try: rax = gdb.parse_and_eval(\"$rax\") char_ptr = rax.cast(gdb.lookup_type(\"char\").pointer()) string = char_ptr.string() print(f\"calling function {string}\") except Exception as e: print(f\"Unable to read string at $rdi: {e}\") class ExitingFunctionCall(gdb.Breakpoint): def __init__(self): super().__init__('*function_call + 308', internal=False) def stop(self): try: rax = gdb.parse_and_eval(\"$rax\") char_ptr = rax.cast(gdb.lookup_type(\"char\").pointer()) string = char_ptr.string() print(f\"end of function {string}\") except Exception as e: print(f\"Unable to read string at $rdi: {e}\") class FunctionBreakpoint(gdb.Breakpoint): def __init__(self, func_name): super().__init__(func_name, internal=False) self.func_name = func_name def stop(self): print(f\"executing {self.func_name}\") return False class BreakDoOperation(gdb.Breakpoint): def __init__(self): super().__init__('*do_operation + 244', internal=False) def stop(self): print(\"\\nBreakpoint at do_operation+244\") try: rdi = gdb.parse_and_eval(\"$rdi\") char_ptr = rdi.cast(gdb.lookup_type(\"char\").pointer()) string = char_ptr.string() except Exception as e: print(f\"Unable to read string at $rdi: {e}\") v5 = gdb.parse_and_eval(\"*(int*)($rbp - 0x88)\") v7 = gdb.parse_and_eval(\"*(int*)($rbp - 0x78)\") if string == \"undocumented_46eb8e8b7b15c3d5\": print(f\"{v5} + {v7}\") elif string == \"undocumented_cfd09200be51d38f\": print(f\"{v7} - {v5}\") elif string == \"undocumented_b341f271c655aaee\": print(f\"{v7} * {v5}\") elif string == \"undocumented_956dd300d7424ff3\": print(f\"{v7} == {v5}\") elif string == \"undocumented_0162f13a50afff09\": print(f\"{v7} != {v5}\") elif string == \"undocumented_a91bdbbce9e82238\": print(f\"{v7} \u003c {v5}\") elif string == \"undocumented_589a700aed48e3a4\": print(f\"{v5} \u003c {v7}\") elif string == \"undocumented_2d5b46a88151170b\": print(f\"{v5} \u003e= {v7}\") elif string == \"undocumented_4c3cc3b8907e3db5\": print(f\"{v7} \u003e= {v5}\") elif string == \"undocumented_aa1bd5b44f53714d\": print(f\"{v7} \u0026\u0026 {v5}\") elif string == \"undocumented_0e772940f0fd3008\": print(f\"{v7} || {v5}\") elif string == \"undocumented_13932b8a4b1bd439\": print(f\"{v7} \u003c\u003c {v5}\") elif string == \"undocumented_0cd2df8843187030\": print(f\"{v7} \u003e\u003e {v5}\") elif string == \"undocumented_b858202486aecd0f\": print(f\"{v5} | {v7}\") elif string == \"undocumented_24e094c9759dc06c\": print(f\"{v5} \u0026 {v7}\") else: print(\"not implemented !!!!\") return False class BreakGetString(gdb.Breakpoint): def __init__(self): super().__init__('*get_string + 97', internal=False) def stop(self): try: rdi = gdb.parse_and_eval(\"$rdi\") char_ptr = rdi.cast(gdb.lookup_type(\"char\").pointer()) string = char_ptr.string() print(f\"getting string {string}\") except Exception as e: print(f\"Unable to read string at $rdi: {e}\") class BreakSubscript(gdb.Breakpoint): def __init__(self): super().__init__(\"*subscript + 221\", internal=False) def stop(self): rdx = gdb.parse_and_eval(\"$rdx\") print(f\"get array[{rdx}]\") return False BreakDoOperation() BreakFunctionCall() ExitingFunctionCall() BreakGetString() BreakSubscript() function_names = [ \"do_unexp\", \"assign\", \"maybe_a_printf\", \"get_user_input\", \"function_call\", \"get_array\", \"set_0\", \"set_1\", \"set_2\", \"set_3\", \"set_4\", \"set_5\", \"set_6\", \"set_7\", \"set_8\", \"set_9\" ] for name in function_names: FunctionBreakpoint(name) Etude du programme Il est maintenant temps de commencer à étudier le programme.\nPour ça j’ai utilisé le script suivant :\nfrom pwn import * p = process(\"./run.sh\") for i in range(9*9): p.sendline(f\"1337{i:02}\") p.interactive() Celui-ci envoie des valeurs commençant par 1337, ainsi il est facilement possible de les retrouver dans notre trace d’exécution. De plus la valeur i nous permet de connaitre l’index dans notre tableau, si l’opération est effectuée sur 133714 on pourra en déduire qu’il a effectué l’opération sur user_input[14 // 9][14 % 9] -\u003e user_input[1][5].\nDurant le reverse, j’ai également utilisé d’autres valeurs que 1337XX afin d’étudier les différents comportements et ne rien louper.\nJe vais ici détailler seulement une ou deux fonctions de la trace d’exécution afin de ne pas rendre l’article trop assommant car le processus ensuite est très répétitif.\nJe vous ai néanmoins mis une trace d’exécution d’exemple ici si vous souhaitez voir à quoi cela ressemble.\nAfin d’avoir une vision plus clair de l’execution des fonctions, on peut faire un grep de calling|end of sur notre trace d’exécution, ainsi après avoir indenté tout ça on se retrouve avec quelque chose de plus clair. On distingue par exemple des appels répétitifs, on peut deviner que ce sont probablement des boucles, etc.\ncalling function pipe end of function pipe calling function lancinante calling function bidonner calling function inattendu end of function inattendu calling function inattendu end of function inattendu calling function inattendu end of function inattendu calling function inattendu end of function inattendu calling function inattendu end of function inattendu calling function inattendu end of function inattendu calling function inattendu end of function inattendu calling function inattendu end of function inattendu calling function inattendu end of function inattendu end of function bidonner calling function symboles calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant calling function mendiant end of function mendiant end of function symboles calling function discutable calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux calling function aux calling function copie end of function copie end of function aux end of function discutable calling function ferrailleur calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber calling function gerber calling function central end of function central end of function gerber end of function ferrailleur end of function lancinante La première fonction pipe va lire l’entrée utilisateur.\nNous allons en premier nous intéresser à la fonction innatendue.\nEn analysant cette fonction, on retrouve 9 fois le même pattern, on peut donc en déduire que c’est une boucle. On retrouve également la condition suivante à chaque itération du pattern : 0 \u003c 9.\nJe vous ai mis ici 2 itérations de cette boucle :\nget array[0] Breakpoint at do_operation+244 1 \u003c\u003c 133700 Breakpoint at do_operation+244 16 \u0026 0 Breakpoint at do_operation+244 1 \u0026\u0026 1 Breakpoint at do_operation+244 9 \u003e= 133700 Breakpoint at do_operation+244 0 \u003c 133700 Breakpoint at do_operation+244 0 \u0026\u0026 1 Breakpoint at do_operation+244 0 \u0026\u0026 1 Breakpoint at do_operation+244 16 | 0 Breakpoint at do_operation+244 1 + 0 Breakpoint at do_operation+244 1 \u003c 9 get array[1] Breakpoint at do_operation+244 1 \u003c\u003c 133701 Breakpoint at do_operation+244 32 \u0026 16 Breakpoint at do_operation+244 1 \u0026\u0026 0 Breakpoint at do_operation+244 9 \u003e= 133701 Breakpoint at do_operation+244 0 \u003c 133701 Breakpoint at do_operation+244 0 \u0026\u0026 1 Breakpoint at do_operation+244 0 \u0026\u0026 0 Breakpoint at do_operation+244 32 | 16 Breakpoint at do_operation+244 1 + 1 Le code semble itérer sur la première ligne de notre entrée utilsateur, il va prendre le premier élément en user_input[0][0] et vérifier que celui-ci se trouve entre 1 et 9 et que la valeur n’apparaît pas deux fois sur la ligne.\nVoici un pseudo code de ce que fais cette fonction :\nfunction inattendu(line) { val = 0 is_ok = true for (i in range 9) { x = user_input[line][i] if (x \u003c 1 or x \u003e 9) { is_ok = false } shifted = 1 \u003c\u003c x if (shifted \u0026 val) { is_ok = false } val = val | shifted } return is_ok } Cette fonction est appelé 9 fois donc très probablement pour chaque ligne de notre input.\nEnsuite une autre fonction très similaire est appelée 9 fois, celle-ci effectue les mêmes opérations mais cette fois sur chaque colonne.\nA partir de là, on peut se douter que le programme implémenté est un sudoku. Je n’ai pas reverse la fonction discutable mais celle-ci effectuant des multiplications par 3 et étant donné le contexte du challenge on peut très facilement deviner qu’elle va vérifier que chaque région du sudoku est valide.\nÀ la suite de cela, le programme va itérer sur un tableau 9x9 qu’il possède en mémoire.\non le comprend grâce aux extraits suivants de notre trace d’exécution :\nget array[0] get array[0] 0 != 0 [...] get array[0] get array[1] 0 != 0 [...] get array[0] get array[2] 0 != 0 [...] get array[0] get array[7] 1 != 0 [...] get array[0] get array[8] 8 != 0 [...] Lorsque la valeur extraite de ce tableau est différente de 0, le programme appelle la fonction gerber. On peut ainsi reconstruire le contenu du tableau, qui ressemble à ceci :\n0 0 0 0 0 0 0 1 8 0 0 5 6 1 0 0 2 0 3 0 0 0 0 0 5 1 0 0 0 0 0 0 0 0 0 2 1 0 0 0 3 0 0 4 4 0 0 0 0 2 1 0 0 5 0 0 0 0 4 3 0 6 1 3 1 0 1 0 6 0 0 0 0 0 4 7 0 0 0 6 7 La fonction gerber, à partir de la position et de la valeur non nulle, appelle ensuite la fonction central. Celle-ci génère quatre nouvelles positions autour de la position d’origine, dans un rayon (horizontal et vertical, pas en diagonale) de N cases, où N correspond à la valeur lue dans notre grille à la position de départ.\nLe programme va ensuite vérifier si au moins une de ces 4 nouvelles positions contient la valeur N.\nVoici un exemple avec les valeurs 3 et 1 afin que ce soit plus parlant.\nRésolution Nous avons donc maintenant toutes les conditions en mains pour pouvoir écrire notre script de solve.\nPour cela, j’ai utilisé un script z3 permettant de résoudre un sudoku auquel j’ai ajouté nos conditions.\nfrom z3 import * grid = [[Int(f\"cell_{i}_{j}\") for j in range(9)] for i in range(9)] s = Solver() for i in range(9): for j in range(9): s.add(And(grid[i][j] \u003e= 1, grid[i][j] \u003c= 9)) for i in range(9): s.add(Distinct(*grid[i])) for j in range(9): col = [grid[i][j] for i in range(9)] s.add(Distinct(*col)) for bi in range(3): for bj in range(3): block = [grid[3*bi + di][3*bj + dj] for di in range(3) for dj in range(3)] s.add(Distinct(*block)) condition_grid = [ [0, 0, 0, 0, 0, 0, 0, 1, 8], [0, 0, 5, 6, 1, 0, 0, 2, 0], [3, 0, 0, 0, 0, 0, 5, 1, 0], [0, 0, 0, 0, 0, 0, 0, 0, 2], [1, 0, 0, 0, 3, 0, 0, 4, 4], [0, 0, 0, 0, 2, 1, 0, 0, 5], [0, 0, 0, 0, 4, 3, 0, 6, 1], [3, 1, 0, 1, 0, 6, 0, 0, 0], [0, 0, 4, 7, 0, 0, 0, 6, 7], ] def get_positions(i,j,k): return [(a, b) for a,b in [ (i + k, j), (i, j + k), (i, j - k), (i - k, j), ] if a \u003c 9 and b \u003c 9 and a \u003e= 0 and b \u003e= 0] # on ajoute nos conditions spécifiques à partir de notre grille de condition for i in range(9): for j in range(9): k = condition_grid[i][j] if k: pos = get_positions(i,j, k) s.add(Or(*[ grid[x][y] == k for x,y in pos ])) if s.check() == sat: m = s.model() solution = [[m.evaluate(grid[i][j]).as_long() for j in range(9)] for i in range(9)] for ligne in solution: print(ligne) else: print(\"Pas de solution trouvée.\") On lance notre script z3 et on obtiens notre grille de solution.\n8 3 6 2 1 9 7 5 4 5 4 9 7 8 6 3 1 2 1 2 7 3 4 5 9 6 8 6 5 8 1 9 3 4 2 7 3 1 4 8 2 7 6 9 5 7 9 2 5 6 4 8 3 1 9 6 5 4 7 1 2 8 3 4 8 1 6 3 2 5 7 9 2 7 3 9 5 8 1 4 6 On peut maintenant l’envoyer à notre programme et celui-ci nous renvoie le flag !\nFCSC{836219754549786312127345968658193427314827695792564831965471283481632579273958146} ","wordCount":"4045","inLanguage":"en","datePublished":"2025-04-27T00:00:00Z","dateModified":"2025-04-27T00:00:00Z","author":{"@type":"Person","name":"TRIKKSS"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://trikkss.github.io/posts/fcsc2025_fcsclang/"},"publisher":{"@type":"Organization","name":"TRIKKSS Blog","logo":{"@type":"ImageObject","url":"https://trikkss.github.io/img/pfp.png"}}}</script></head><body class=dark id=top><script>localStorage.getItem("pref-theme")==="light"&&document.body.classList.remove("dark")</script><header class=header><nav class=nav><div class=logo><a href=https://trikkss.github.io/ accesskey=h title="Home (Alt + H)"><img src=https://trikkss.github.io/img/pfp.png alt aria-label=logo height=35>Home</a><div class=logo-switches><button id=theme-toggle accesskey=t title="(Alt + T)"><svg id="moon" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg><svg id="sun" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button><ul class=lang-switch><li>|</li></ul></div></div><ul id=menu><li><a href=https://trikkss.github.io/posts/ title=Posts><span>Posts</span></a></li><li><a href=https://trikkss.github.io/tags/ title=Tags><span>Tags</span></a></li></ul></nav></header><main class=main><article class=post-single><header class=post-header><div class=breadcrumbs><a href=https://trikkss.github.io/>Home</a>&nbsp;»&nbsp;<a href=https://trikkss.github.io/posts/>Posts</a></div><h1 class=post-title>FCSC 2025 - fcsclang</h1><div class=post-meta><span title='2025-04-27 00:00:00 +0000 UTC'>April 27, 2025</span>&nbsp;·&nbsp;19 min&nbsp;·&nbsp;4045 words&nbsp;·&nbsp;TRIKKSS</div></header><div class=toc><details open><summary accesskey=c title="(Alt + C)"><span class=details>Table of Contents</span></summary><div class=inner><nav id=TableOfContents><ul><li><a href=#découverte-du-challenge>Découverte du challenge</a></li><li><a href=#analyse-du-binaire>Analyse du binaire</a></li><li><a href=#reverse-de-la-vm>Reverse de la VM</a></li><li><a href=#etude-du-programme>Etude du programme</a></li><li><a href=#résolution>Résolution</a></li></ul></nav></div></details></div><div class=post-content><p><em>vous pouvez retrouver les fichiers joint avec le chall <a href=/static/fcsclang.tar.xz>ici</a></em></p><p><img loading=lazy src=/img/posts/fcsc2025-fcsclang/challenge.png alt="description du challenge"></p><h2 id=découverte-du-challenge>Découverte du challenge<a hidden class=anchor aria-hidden=true href=#découverte-du-challenge>#</a></h2><p>Dans ce challenge de reverse, on tombait sur une VM un peu spéciale, fonctionnant à l&rsquo;aide de tree-sitter.</p><blockquote><p>Tree-sitter est une bibliothèque qui sert à analyser du code source de manière rapide et structurée.<br>Elle transforme un fichier de code en un arbre syntaxique (AST) facilement parcourable, avec des mises à jour incrémentales en temps réel, idéal pour des outils comme les éditeurs de texte ou l&rsquo;analyse de code.</p><p><em>Source : ChatGPT</em></p></blockquote><p>Dans ce writeup, on va voir comment résoudre un challenge de reverse de VM sans nécessairement avoir besoin de comprendre le fonctionnement de celle-ci.</p><p>L&rsquo;archive fournie avec le challenge nous donne 4 fichiers :</p><ul><li>un ELF <code>fcsclang</code></li><li>une lib partagée <code>libfcsclang.so</code></li><li>un programme pour la vm <code>program.fcsc</code></li><li>un fichier Dockerfile</li><li>un fichier <code>run.sh</code> permettant de lancer le docker</li></ul><h2 id=analyse-du-binaire>Analyse du binaire<a hidden class=anchor aria-hidden=true href=#analyse-du-binaire>#</a></h2><p>Lorsque l&rsquo;on ouvre la fonction principale du binaire on observe que celui-ci prend en argument un fichier contenant un programme pour la VM, initialise un parser et va parser notre programme à l&rsquo;aide tree-sitter.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=kr>__int64</span> <span class=kr>__fastcall</span> <span class=nf>main</span><span class=p>(</span><span class=kr>__int64</span> <span class=n>a1</span><span class=p>,</span> <span class=kt>char</span> <span class=o>**</span><span class=n>a2</span><span class=p>,</span> <span class=kt>char</span> <span class=o>**</span><span class=n>a3</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kr>__int64</span> <span class=n>v4</span><span class=p>;</span> <span class=c1>// rax
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>int</span> <span class=n>v5</span><span class=p>;</span> <span class=c1>// eax
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>size_t</span> <span class=n>v6</span><span class=p>;</span> <span class=c1>// rax
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=n>_QWORD</span> <span class=n>v7</span><span class=p>[</span><span class=mi>4</span><span class=p>];</span> <span class=c1>// [rsp+10h] [rbp-F0h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=n>_BYTE</span> <span class=n>v8</span><span class=p>[</span><span class=mi>8</span><span class=p>];</span> <span class=c1>// [rsp+30h] [rbp-D0h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>v9</span><span class=p>;</span> <span class=c1>// [rsp+38h] [rbp-C8h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=n>stat</span> <span class=n>buf</span><span class=p>;</span> <span class=c1>// [rsp+40h] [rbp-C0h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kr>__int64</span> <span class=n>v11</span><span class=p>;</span> <span class=c1>// [rsp+D8h] [rbp-28h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>unsigned</span> <span class=kr>__int64</span> <span class=n>st_size</span><span class=p>;</span> <span class=c1>// [rsp+E0h] [rbp-20h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=n>FILE</span> <span class=o>*</span><span class=n>stream</span><span class=p>;</span> <span class=c1>// [rsp+E8h] [rbp-18h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kr>__int64</span> <span class=n>v14</span><span class=p>;</span> <span class=c1>// [rsp+F0h] [rbp-10h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>unsigned</span> <span class=kr>__int64</span> <span class=n>i</span><span class=p>;</span> <span class=c1>// [rsp+F8h] [rbp-8h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>a1</span> <span class=o>&gt;</span> <span class=mi>1</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>v14</span> <span class=o>=</span> <span class=nf>ts_parser_new</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>,</span> <span class=n>a3</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=n>v4</span> <span class=o>=</span> <span class=nf>tree_sitter_fcsclang</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>    <span class=nf>ts_parser_set_language</span><span class=p>(</span><span class=n>v14</span><span class=p>,</span> <span class=n>v4</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=n>stream</span> <span class=o>=</span> <span class=nf>fopen</span><span class=p>(</span><span class=n>a2</span><span class=p>[</span><span class=mi>1</span><span class=p>],</span> <span class=s>&#34;r&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span> <span class=n>stream</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>      <span class=n>v5</span> <span class=o>=</span> <span class=nf>fileno</span><span class=p>(</span><span class=n>stream</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>      <span class=nf>fstat</span><span class=p>(</span><span class=n>v5</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>buf</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>      <span class=n>st_size</span> <span class=o>=</span> <span class=n>buf</span><span class=p>.</span><span class=n>st_size</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>      <span class=n>program</span> <span class=o>=</span> <span class=nf>do_malloc</span><span class=p>(</span><span class=n>buf</span><span class=p>.</span><span class=n>st_size</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>      <span class=k>for</span> <span class=p>(</span> <span class=n>i</span> <span class=o>=</span> <span class=mi>0LL</span><span class=p>;</span> <span class=n>i</span> <span class=o>&lt;</span> <span class=n>st_size</span><span class=p>;</span> <span class=n>i</span> <span class=o>+=</span> <span class=n>v6</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>v6</span> <span class=o>=</span> <span class=nf>fread</span><span class=p>(</span><span class=n>program</span><span class=p>,</span> <span class=mi>1uLL</span><span class=p>,</span> <span class=n>st_size</span> <span class=o>-</span> <span class=n>i</span><span class=p>,</span> <span class=n>stream</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>      <span class=n>v11</span> <span class=o>=</span> <span class=nf>ts_parser_parse_string</span><span class=p>(</span><span class=n>v14</span><span class=p>,</span> <span class=mi>0LL</span><span class=p>,</span> <span class=n>program</span><span class=p>,</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>st_size</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>      <span class=k>if</span> <span class=p>(</span> <span class=n>v11</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>      <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>qword_7150</span> <span class=o>=</span> <span class=p>(</span><span class=kr>__int64</span><span class=p>)</span><span class=nf>sub_1561</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=n>qword_7158</span> <span class=o>=</span> <span class=nf>sub_3A01</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=nf>sub_1329</span><span class=p>(</span><span class=n>v11</span><span class=p>,</span> <span class=n>v7</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>exec_instr</span><span class=p>((</span><span class=kr>__int64</span><span class=p>)</span><span class=n>v7</span><span class=p>,</span> <span class=p>(</span><span class=kr>__int64</span><span class=p>)</span><span class=n>v8</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>sub_1657</span><span class=p>(</span><span class=n>qword_7150</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>sub_3A52</span><span class=p>((</span><span class=n>_QWORD</span> <span class=o>*</span><span class=p>)</span><span class=n>qword_7158</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>program</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ts_tree_delete</span><span class=p>(</span><span class=n>v11</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ts_parser_delete</span><span class=p>(</span><span class=n>v14</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>v9</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>      <span class=p>}</span>
+</span></span><span class=line><span class=cl>      <span class=k>else</span>
+</span></span><span class=line><span class=cl>      <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=mh>0xFFFFFFFFLL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>      <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>else</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>      <span class=k>return</span> <span class=mh>0xFFFFFFFFLL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>else</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>printf</span><span class=p>(</span><span class=s>&#34;Usage: %s &lt;program&gt;</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>,</span> <span class=o>*</span><span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mh>0xFFFFFFFFLL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>Lorsque l&rsquo;on lance le binaire, celui-ci se lance mais rien ne semble se passer. Je décide donc de lancer un <code>ltrace</code> avec celui-ci afin d&rsquo;avoir une idée de ce qu&rsquo;il se passe. Pour ce faire, on modifie l&rsquo;entrypoint de notre <code>Dockerfile</code> par <code>["ltrace", "./fcsclang", "program.fcsc"]</code> et on relance notre programme.</p><p>La trace d&rsquo;exécution générée par ltrace est conséquente, on va donc pipe celle-ci vers vscode.</p><pre tabindex=0><code>run.sh 2&gt;&amp;1 | code -
+</code></pre><p>Si nous jetons un oeil à la trace d&rsquo;exécution, nous pouvoir voir l&rsquo;initialisation du parser</p><pre tabindex=0><code>ts_parser_new(3, 0x7ffcd3821168, 0x7ffcd3821188, 0x63b3a1e11db8) = 0x63b3b18622a0
+tree_sitter_fcsclang(0x63b3b1862a40, 232, 1, 0)  = 0x715c8c6a0d80
+ts_parser_set_language(0x63b3b18622a0, 0x715c8c6a0d80, 0x715c8c6a0d80, 0) = 1
+fopen(&#34;program.fcsc&#34;, &#34;r&#34;)                       = 0x63b3b1862ea0
+</code></pre><p>Et surtout nous pouvons voir qu&rsquo;il prend notre entrée et va effectuer un <code>atoi</code> dessus. Cette fonction permet de convertir une string en entier.</p><pre tabindex=0><code>getline(&#34;aaaaaaa\n&#34;, 120, 0x715c8c3008e0)        = 8
+atoi(0x63b3b18cf140, 0xa61616161616161, 1, 0xa61616161616161) = 0
+</code></pre><p>En parcourant rapidemment les fonctions, on trouve la fonction que j&rsquo;ai renommé <code>exec_instr</code> qui semble intéressante. Celle-ci contient un switch-case semblant contenir les différentes instructions de la machine virtuelle. Certaines instructions ont des noms explicites, tandis que d&rsquo;autres, qui commencent par <code>undocumented_</code>, sont beaucoup moins parlantes.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=kr>__int64</span> <span class=kr>__fastcall</span> <span class=nf>exec_instr</span><span class=p>(</span><span class=kr>__int64</span> <span class=n>a1</span><span class=p>,</span> <span class=kr>__int64</span> <span class=n>a2</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kt>char</span> <span class=o>*</span><span class=n>s1</span><span class=p>;</span> <span class=c1>// [rsp+18h] [rbp-8h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kr>__int8</span><span class=p>)</span><span class=nf>sub_1A2C</span><span class=p>(</span><span class=n>a1</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>fwrite</span><span class=p>(</span><span class=s>&#34;Syntax error</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>,</span> <span class=mi>1uLL</span><span class=p>,</span> <span class=mh>0xDuLL</span><span class=p>,</span> <span class=n>stderr</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=n>s1</span> <span class=o>=</span> <span class=p>(</span><span class=kt>char</span> <span class=o>*</span><span class=p>)</span><span class=nf>get_node_type</span><span class=p>(</span><span class=n>a1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;function_definition&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_30AF</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;number&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_1C3A</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_732293a7c7094ffd&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_0</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_f9bfceb10223dcd6&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_1</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_d53cabc7357ff2a5&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_2</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_210eb81a94b8b633&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_3</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_c589a8f3aaff75f7&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_4</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_ac7469dafc6e9c77&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_5</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_8212463fe42cc213&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_6</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_791df7d09856e81f&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_7</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_db9dce746e821769&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_8</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_ac3fcec30d0b6a40&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>set_9</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;str&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>get_string</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;array&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>get_array</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;identifier&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_22FC</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;function_call&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>function_call</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;scope&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_306B</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;lvalue&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_2192</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;assign&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>assign</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;subscript&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>subscript</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;binexp&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>do_operation</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;unexp&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>do_unexp</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_9bfdf82a969d10c2&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>get_user_input</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_af0dbc52101afc49&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>maybe_a_printf</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_0fe135eb8cd073ef&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_2C3C</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_48359b1cc713e5a1&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_2CCD</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_c44ff70e0a035b84&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_2D91</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=nf>sub_1B7A</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>On peut par exemple retrouver l&rsquo;instruction <code>undocumented_9bfdf82a969d10c2</code> qui fait un <code>getline</code> et un <code>atoi</code>, on peut donc en déduire que c&rsquo;est cette fonction va lire notre entrée utilisateur.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>  <span class=nf>getline</span><span class=p>(</span><span class=o>&amp;</span><span class=n>lineptr</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>n</span><span class=p>,</span> <span class=n>stdin</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=n>v5</span> <span class=o>=</span> <span class=nf>atoi</span><span class=p>(</span><span class=n>lineptr</span><span class=p>);</span>
+</span></span></code></pre></div><h2 id=reverse-de-la-vm>Reverse de la VM<a hidden class=anchor aria-hidden=true href=#reverse-de-la-vm>#</a></h2><p>A partir de là, ma façon de procéder pour le reverse de VM est de chercher pour des instructions intéressantes et hook celles-ci afin de générer une trace d&rsquo;exécution et potentiellement comprendre le programme en entrée sans avoir à comprendre le fonctionnement de la machine virtuelle. Je trouve donc la fonction que j&rsquo;ai renommé <code>do_operation()</code> qui semble particulièrement intéressante.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=kr>__int64</span> <span class=kr>__fastcall</span> <span class=nf>do_operation</span><span class=p>(</span><span class=n>_QWORD</span> <span class=o>*</span><span class=n>a1</span><span class=p>,</span> <span class=kr>__int64</span> <span class=n>a2</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=n>_BOOL4</span> <span class=n>v3</span><span class=p>;</span> <span class=c1>// eax
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>int</span> <span class=n>v4</span><span class=p>;</span> <span class=c1>// [rsp+10h] [rbp-90h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kr>__int64</span> <span class=n>v5</span><span class=p>;</span> <span class=c1>// [rsp+18h] [rbp-88h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>int</span> <span class=n>v6</span><span class=p>;</span> <span class=c1>// [rsp+20h] [rbp-80h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kr>__int64</span> <span class=n>v7</span><span class=p>;</span> <span class=c1>// [rsp+28h] [rbp-78h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=n>_QWORD</span> <span class=n>v8</span><span class=p>[</span><span class=mi>4</span><span class=p>];</span> <span class=c1>// [rsp+30h] [rbp-70h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=n>_QWORD</span> <span class=n>v9</span><span class=p>[</span><span class=mi>4</span><span class=p>];</span> <span class=c1>// [rsp+50h] [rbp-50h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=n>_QWORD</span> <span class=n>v10</span><span class=p>[</span><span class=mi>5</span><span class=p>];</span> <span class=c1>// [rsp+70h] [rbp-30h] BYREF
+</span></span></span><span class=line><span class=cl><span class=c1></span>  <span class=kt>char</span> <span class=o>*</span><span class=n>s1</span><span class=p>;</span> <span class=c1>// [rsp+98h] [rbp-8h]
+</span></span></span><span class=line><span class=cl><span class=c1></span>
+</span></span><span class=line><span class=cl>  <span class=nf>search_node_child_by_field_name</span><span class=p>(</span><span class=n>a1</span><span class=p>,</span> <span class=s>&#34;op&#34;</span><span class=p>,</span> <span class=n>v10</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=nf>search_node_child_by_field_name</span><span class=p>(</span><span class=n>v10</span><span class=p>,</span> <span class=s>&#34;left&#34;</span><span class=p>,</span> <span class=n>v9</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=nf>search_node_child_by_field_name</span><span class=p>(</span><span class=n>v10</span><span class=p>,</span> <span class=s>&#34;right&#34;</span><span class=p>,</span> <span class=n>v8</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=nf>exec_instr</span><span class=p>((</span><span class=kr>__int64</span><span class=p>)</span><span class=n>v9</span><span class=p>,</span> <span class=p>(</span><span class=kr>__int64</span><span class=p>)</span><span class=o>&amp;</span><span class=n>v6</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=nf>exec_instr</span><span class=p>((</span><span class=kr>__int64</span><span class=p>)</span><span class=n>v8</span><span class=p>,</span> <span class=p>(</span><span class=kr>__int64</span><span class=p>)</span><span class=o>&amp;</span><span class=n>v4</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=n>s1</span> <span class=o>=</span> <span class=p>(</span><span class=kt>char</span> <span class=o>*</span><span class=p>)</span><span class=nf>get_node_type</span><span class=p>(</span><span class=n>v10</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=n>v6</span> <span class=o>!=</span> <span class=mi>1</span> <span class=o>||</span> <span class=n>v4</span> <span class=o>!=</span> <span class=mi>1</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>fwrite</span><span class=p>(</span><span class=s>&#34;Invalid type</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>,</span> <span class=mi>1uLL</span><span class=p>,</span> <span class=mh>0xDuLL</span><span class=p>,</span> <span class=n>stderr</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_46eb8e8b7b15c3d5&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>int</span><span class=p>)</span><span class=n>v5</span> <span class=o>+</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>v7</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_cfd09200be51d38f&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>int</span><span class=p>)</span><span class=n>v7</span> <span class=o>-</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_b341f271c655aaee&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>int</span><span class=p>)</span><span class=n>v7</span> <span class=o>*</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_956dd300d7424ff3&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>(</span><span class=n>v7</span> <span class=o>==</span> <span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_0162f13a50afff09&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>(</span><span class=n>v7</span> <span class=o>!=</span> <span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_a91bdbbce9e82238&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v7</span> <span class=o>&lt;</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_589a700aed48e3a4&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v5</span> <span class=o>&lt;</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v7</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_2d5b46a88151170b&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v5</span> <span class=o>&gt;=</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v7</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_4c3cc3b8907e3db5&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v7</span> <span class=o>&gt;=</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_aa1bd5b44f53714d&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>v3</span> <span class=o>=</span> <span class=n>v7</span> <span class=o>&amp;&amp;</span> <span class=n>v5</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>(</span><span class=n>v3</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_0e772940f0fd3008&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>v3</span> <span class=o>=</span> <span class=n>v7</span> <span class=o>||</span> <span class=n>v5</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>(</span><span class=n>v3</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_13932b8a4b1bd439&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=n>_DWORD</span><span class=p>)</span><span class=n>v7</span> <span class=o>&lt;&lt;</span> <span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_0cd2df8843187030&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v7</span> <span class=o>&gt;&gt;</span> <span class=n>v5</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=o>!</span><span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_b858202486aecd0f&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v5</span> <span class=o>|</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v7</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span> <span class=nf>strcmp</span><span class=p>(</span><span class=n>s1</span><span class=p>,</span> <span class=s>&#34;undocumented_24e094c9759dc06c&#34;</span><span class=p>)</span> <span class=p>)</span>
+</span></span><span class=line><span class=cl>  <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>fwrite</span><span class=p>(</span><span class=s>&#34;Not implemented</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>,</span> <span class=mi>1uLL</span><span class=p>,</span> <span class=mh>0x10uLL</span><span class=p>,</span> <span class=n>stderr</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=nf>sub_3BF0</span><span class=p>((</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v5</span> <span class=o>&amp;</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span><span class=n>v7</span><span class=p>,</span> <span class=n>a2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>En effet, dans cette fonction se trouve un switch case pour différentes opérations mathématiques et binaire. Ce sera donc notre premier hook.</p><p>J&rsquo;ai pour cela simplement utilisé un script gdb avec python. J&rsquo;ai également exporté les symboles depuis IDA à l&rsquo;aide de l&rsquo;extension <a href=https://github.com/danigargu/syms2elf>syms2elf</a>.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-py data-lang=py><span class=line><span class=cl><span class=kn>import</span> <span class=nn>gdb</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>BreakDoOperation</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s1>&#39;*do_operation + 244&#39;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>rdi</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rdi&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>char_ptr</span> <span class=o>=</span> <span class=n>rdi</span><span class=o>.</span><span class=n>cast</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>lookup_type</span><span class=p>(</span><span class=s2>&#34;char&#34;</span><span class=p>)</span><span class=o>.</span><span class=n>pointer</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=n>string</span> <span class=o>=</span> <span class=n>char_ptr</span><span class=o>.</span><span class=n>string</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unable to read string at $rdi: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=n>v5</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;*(int*)($rbp - 0x88)&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>v7</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;*(int*)($rbp - 0x78)&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_46eb8e8b7b15c3d5&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> + </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_cfd09200be51d38f&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> - </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_b341f271c655aaee&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> * </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_956dd300d7424ff3&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> == </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_0162f13a50afff09&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> != </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_a91bdbbce9e82238&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &lt; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_589a700aed48e3a4&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> &lt; </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_2d5b46a88151170b&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> &gt;= </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_4c3cc3b8907e3db5&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &gt;= </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_aa1bd5b44f53714d&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &amp;&amp; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_0e772940f0fd3008&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> || </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_13932b8a4b1bd439&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &lt;&lt; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_0cd2df8843187030&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &gt;&gt; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_b858202486aecd0f&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> | </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_24e094c9759dc06c&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> &amp; </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;not implemented !!!!&#34;</span><span class=p>)</span>            
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=kc>False</span>
+</span></span></code></pre></div><p>De plus, j&rsquo;ai hooké les fonctions qui étaient &ldquo;guessable&rdquo; à partir de leur noms ou en survolant rapidemment leur code.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-py data-lang=py><span class=line><span class=cl><span class=n>function_names</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;do_unexp&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;maybe_a_printf&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;get_user_input&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;function_call&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;get_array&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;get_string&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=c1># j&#39;ai renommé ces fonctions ainsi car elles semblaient mettre des valeurs de 0 à 9, peut être un push sur une stack ou un registre, je n&#39;ai pas creusé mais ça nous permet d&#39;avoir une idée dans notre trace.</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_0&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_1&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_2&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_3&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_4&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_5&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_6&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_7&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_8&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_9&#34;</span>  
+</span></span><span class=line><span class=cl><span class=p>]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>FunctionBreakpoint</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>func_name</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=n>func_name</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=bp>self</span><span class=o>.</span><span class=n>func_name</span> <span class=o>=</span> <span class=n>func_name</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;executing </span><span class=si>{</span><span class=bp>self</span><span class=o>.</span><span class=n>func_name</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=kc>False</span> 
+</span></span></code></pre></div><p>Maintenant si on relance le binaire avec le Dockerfile suivant :</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-docker data-lang=docker><span class=line><span class=cl><span class=k>FROM</span><span class=s> debian:sid</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err></span><span class=k>RUN</span> apt update <span class=o>&amp;&amp;</span> apt install -y libtree-sitter-dev<span class=o>=</span>0.22.6-6 ltrace gdb python3<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err></span><span class=k>COPY</span> . /fcsclang<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err></span><span class=k>WORKDIR</span><span class=s> /fcsclang</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err></span><span class=k>ENV</span> LD_LIBRARY_PATH .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err></span><span class=k>ENTRYPOINT</span> <span class=p>[</span><span class=s2>&#34;gdb&#34;</span><span class=p>,</span> <span class=s2>&#34;-q&#34;</span><span class=p>,</span> <span class=s2>&#34;-ex&#34;</span><span class=p>,</span> <span class=s2>&#34;source gdb_do_operation_hook.py&#34;</span><span class=p>,</span> <span class=s2>&#34;-ex&#34;</span><span class=p>,</span> <span class=s2>&#34;run program.fcsc&#34;</span><span class=p>,</span> <span class=s2>&#34;-ex&#34;</span><span class=p>,</span> <span class=s2>&#34;quit&#34;</span><span class=p>,</span> <span class=s2>&#34;fcsclang_symbols&#34;</span><span class=p>]</span><span class=err>
+</span></span></span></code></pre></div><p>On obtient en sortie une trace d&rsquo;exécution gigantesque.</p><p>On peut tout de même voir que dans les premières instructions le programme semble stocker l&rsquo;entrée utilisateur dans un tableau 9x9.</p><pre tabindex=0><code>0 &lt; 9
+executing set_0
+executing set_9
+
+0 &lt; 9
+executing get_user_input
+executing set_1
+
+1 + 0
+executing set_9
+
+1 &lt; 9
+executing get_user_input
+executing set_1
+
+1 + 1
+executing set_9
+
+2 &lt; 9
+executing get_user_input
+executing set_1
+
+1 + 2
+executing set_9
+
+3 &lt; 9
+executing get_user_input
+executing set_1
+
+[...]
+</code></pre><p>Malheureusement, la trace d&rsquo;exécution étant beaucoup trop grande, il est très compliqué de comprendre son fonctionnement. Heureusement, le programme semble utiliser des fonctions ! Dans le switch case permettant de gérer les instructions de la machine virtuelle on retrouve un appel très intéressant : <code>function_call</code></p><p>On va donc créer 2 hook, un <code>function_call</code> et un <code>function_end</code>, ainsi il sera possible de séparer les traces d&rsquo;executions par fonction et de grandement simplifier le processus de reverse.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-py data-lang=py><span class=line><span class=cl><span class=k>class</span> <span class=nc>BreakFunctionCall</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s1>&#39;*function_call + 66&#39;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>rax</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rax&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>char_ptr</span> <span class=o>=</span> <span class=n>rax</span><span class=o>.</span><span class=n>cast</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>lookup_type</span><span class=p>(</span><span class=s2>&#34;char&#34;</span><span class=p>)</span><span class=o>.</span><span class=n>pointer</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=n>string</span> <span class=o>=</span> <span class=n>char_ptr</span><span class=o>.</span><span class=n>string</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;calling function </span><span class=si>{</span><span class=n>string</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unable to read string at $rdi: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>ExitingFunctionCall</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s1>&#39;*function_call + 308&#39;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>rax</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rax&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>char_ptr</span> <span class=o>=</span> <span class=n>rax</span><span class=o>.</span><span class=n>cast</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>lookup_type</span><span class=p>(</span><span class=s2>&#34;char&#34;</span><span class=p>)</span><span class=o>.</span><span class=n>pointer</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=n>string</span> <span class=o>=</span> <span class=n>char_ptr</span><span class=o>.</span><span class=n>string</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;end of function </span><span class=si>{</span><span class=n>string</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unable to read string at $rdi: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span></code></pre></div><p>Un dernier hook qui me semble important est le hook de subscript, celui-ci va nous permettre de voir quel element d&rsquo;une array est lu.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-py data-lang=py><span class=line><span class=cl><span class=k>class</span> <span class=nc>BreakSubscript</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s2>&#34;*subscript + 221&#34;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>rdx</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rdx&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;get array[</span><span class=si>{</span><span class=n>rdx</span><span class=si>}</span><span class=s2>]&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=kc>False</span>
+</span></span></code></pre></div><p>Voici le script complet permettant de générer notre trace d&rsquo;exécution :</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=kn>import</span> <span class=nn>gdb</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>BreakFunctionCall</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s1>&#39;*function_call + 66&#39;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>rax</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rax&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>char_ptr</span> <span class=o>=</span> <span class=n>rax</span><span class=o>.</span><span class=n>cast</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>lookup_type</span><span class=p>(</span><span class=s2>&#34;char&#34;</span><span class=p>)</span><span class=o>.</span><span class=n>pointer</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=n>string</span> <span class=o>=</span> <span class=n>char_ptr</span><span class=o>.</span><span class=n>string</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;calling function </span><span class=si>{</span><span class=n>string</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unable to read string at $rdi: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>ExitingFunctionCall</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s1>&#39;*function_call + 308&#39;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>rax</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rax&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>char_ptr</span> <span class=o>=</span> <span class=n>rax</span><span class=o>.</span><span class=n>cast</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>lookup_type</span><span class=p>(</span><span class=s2>&#34;char&#34;</span><span class=p>)</span><span class=o>.</span><span class=n>pointer</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=n>string</span> <span class=o>=</span> <span class=n>char_ptr</span><span class=o>.</span><span class=n>string</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;end of function </span><span class=si>{</span><span class=n>string</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unable to read string at $rdi: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>FunctionBreakpoint</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>func_name</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=n>func_name</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=bp>self</span><span class=o>.</span><span class=n>func_name</span> <span class=o>=</span> <span class=n>func_name</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;executing </span><span class=si>{</span><span class=bp>self</span><span class=o>.</span><span class=n>func_name</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=kc>False</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>BreakDoOperation</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s1>&#39;*do_operation + 244&#39;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>Breakpoint at do_operation+244&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>rdi</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rdi&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>char_ptr</span> <span class=o>=</span> <span class=n>rdi</span><span class=o>.</span><span class=n>cast</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>lookup_type</span><span class=p>(</span><span class=s2>&#34;char&#34;</span><span class=p>)</span><span class=o>.</span><span class=n>pointer</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=n>string</span> <span class=o>=</span> <span class=n>char_ptr</span><span class=o>.</span><span class=n>string</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unable to read string at $rdi: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=n>v5</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;*(int*)($rbp - 0x88)&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>v7</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;*(int*)($rbp - 0x78)&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_46eb8e8b7b15c3d5&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> + </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_cfd09200be51d38f&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> - </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_b341f271c655aaee&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> * </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_956dd300d7424ff3&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> == </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_0162f13a50afff09&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> != </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_a91bdbbce9e82238&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &lt; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_589a700aed48e3a4&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> &lt; </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_2d5b46a88151170b&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> &gt;= </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_4c3cc3b8907e3db5&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &gt;= </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_aa1bd5b44f53714d&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &amp;&amp; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_0e772940f0fd3008&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> || </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_13932b8a4b1bd439&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &lt;&lt; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_0cd2df8843187030&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2> &gt;&gt; </span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_b858202486aecd0f&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> | </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>elif</span> <span class=n>string</span> <span class=o>==</span> <span class=s2>&#34;undocumented_24e094c9759dc06c&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=si>{</span><span class=n>v5</span><span class=si>}</span><span class=s2> &amp; </span><span class=si>{</span><span class=n>v7</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;not implemented !!!!&#34;</span><span class=p>)</span>            
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=kc>False</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>BreakGetString</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s1>&#39;*get_string + 97&#39;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>rdi</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rdi&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>char_ptr</span> <span class=o>=</span> <span class=n>rdi</span><span class=o>.</span><span class=n>cast</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>lookup_type</span><span class=p>(</span><span class=s2>&#34;char&#34;</span><span class=p>)</span><span class=o>.</span><span class=n>pointer</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=n>string</span> <span class=o>=</span> <span class=n>char_ptr</span><span class=o>.</span><span class=n>string</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;getting string </span><span class=si>{</span><span class=n>string</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unable to read string at $rdi: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>BreakSubscript</span><span class=p>(</span><span class=n>gdb</span><span class=o>.</span><span class=n>Breakpoint</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>super</span><span class=p>()</span><span class=o>.</span><span class=fm>__init__</span><span class=p>(</span><span class=s2>&#34;*subscript + 221&#34;</span><span class=p>,</span> <span class=n>internal</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=nf>stop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>rdx</span> <span class=o>=</span> <span class=n>gdb</span><span class=o>.</span><span class=n>parse_and_eval</span><span class=p>(</span><span class=s2>&#34;$rdx&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;get array[</span><span class=si>{</span><span class=n>rdx</span><span class=si>}</span><span class=s2>]&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=kc>False</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>BreakDoOperation</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=n>BreakFunctionCall</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=n>ExitingFunctionCall</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=n>BreakGetString</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=n>BreakSubscript</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>function_names</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;do_unexp&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;assign&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;maybe_a_printf&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;get_user_input&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;function_call&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;get_array&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_0&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_1&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_2&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_3&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_4&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_5&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_6&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_7&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_8&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;set_9&#34;</span>
+</span></span><span class=line><span class=cl><span class=p>]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>name</span> <span class=ow>in</span> <span class=n>function_names</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=n>FunctionBreakpoint</span><span class=p>(</span><span class=n>name</span><span class=p>)</span>
+</span></span></code></pre></div><h2 id=etude-du-programme>Etude du programme<a hidden class=anchor aria-hidden=true href=#etude-du-programme>#</a></h2><p>Il est maintenant temps de commencer à étudier le programme.</p><p>Pour ça j&rsquo;ai utilisé le script suivant :</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-py data-lang=py><span class=line><span class=cl><span class=kn>from</span> <span class=nn>pwn</span> <span class=kn>import</span> <span class=o>*</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>p</span> <span class=o>=</span> <span class=n>process</span><span class=p>(</span><span class=s2>&#34;./run.sh&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=o>*</span><span class=mi>9</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>  <span class=n>p</span><span class=o>.</span><span class=n>sendline</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;1337</span><span class=si>{</span><span class=n>i</span><span class=si>:</span><span class=s2>02</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>p</span><span class=o>.</span><span class=n>interactive</span><span class=p>()</span>
+</span></span></code></pre></div><p>Celui-ci envoie des valeurs commençant par 1337, ainsi il est facilement possible de les retrouver dans notre trace d&rsquo;exécution. De plus la valeur <code>i</code> nous permet de connaitre l&rsquo;index dans notre tableau, si l&rsquo;opération est effectuée sur <code>133714</code> on pourra en déduire qu’il a effectué l’opération sur <code>user_input[14 // 9][14 % 9] -> user_input[1][5]</code>.</p><p>Durant le reverse, j&rsquo;ai également utilisé d&rsquo;autres valeurs que <code>1337XX</code> afin d&rsquo;étudier les différents comportements et ne rien louper.</p><p>Je vais ici détailler seulement une ou deux fonctions de la trace d&rsquo;exécution afin de ne pas rendre l&rsquo;article trop assommant car le processus ensuite est très répétitif.</p><p>Je vous ai néanmoins mis une trace d&rsquo;exécution d&rsquo;exemple <a href=/static/trace_exec_exemple.txt>ici</a> si vous souhaitez voir à quoi cela ressemble.</p><p>Afin d&rsquo;avoir une vision plus clair de l&rsquo;execution des fonctions, on peut faire un grep de <code>calling|end of</code> sur notre trace d&rsquo;exécution, ainsi après avoir indenté tout ça on se retrouve avec quelque chose de plus clair. On distingue par exemple des appels répétitifs, on peut deviner que ce sont probablement des boucles, etc.</p><pre tabindex=0><code>calling function pipe
+end of function pipe
+calling function lancinante
+    calling function bidonner
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+        calling function inattendu
+        end of function inattendu
+    end of function bidonner
+    calling function symboles
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+        calling function mendiant
+        end of function mendiant
+    end of function symboles
+    calling function discutable
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+        calling function aux
+            calling function copie
+            end of function copie
+        end of function aux
+    end of function discutable
+    calling function ferrailleur
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+        calling function gerber
+            calling function central
+            end of function central
+        end of function gerber
+    end of function ferrailleur
+end of function lancinante
+</code></pre><p>La première fonction <code>pipe</code> va lire l&rsquo;entrée utilisateur.</p><p>Nous allons en premier nous intéresser à la fonction <code>innatendue</code>.</p><p>En analysant cette fonction, on retrouve 9 fois le même pattern, on peut donc en déduire que c&rsquo;est une boucle. On retrouve également la condition suivante à chaque itération du pattern : <code>0 &lt; 9</code>.</p><p>Je vous ai mis ici 2 itérations de cette boucle :</p><pre tabindex=0><code>get array[0]
+
+Breakpoint at do_operation+244
+1 &lt;&lt; 133700
+
+Breakpoint at do_operation+244
+16 &amp; 0
+
+Breakpoint at do_operation+244
+1 &amp;&amp; 1
+
+Breakpoint at do_operation+244
+9 &gt;= 133700
+
+Breakpoint at do_operation+244
+0 &lt; 133700
+
+Breakpoint at do_operation+244
+0 &amp;&amp; 1
+
+Breakpoint at do_operation+244
+0 &amp;&amp; 1
+
+Breakpoint at do_operation+244
+16 | 0
+
+Breakpoint at do_operation+244
+1 + 0
+
+Breakpoint at do_operation+244
+1 &lt; 9
+get array[1]
+
+Breakpoint at do_operation+244
+1 &lt;&lt; 133701
+
+Breakpoint at do_operation+244
+32 &amp; 16
+
+Breakpoint at do_operation+244
+1 &amp;&amp; 0
+
+Breakpoint at do_operation+244
+9 &gt;= 133701
+
+Breakpoint at do_operation+244
+0 &lt; 133701
+
+Breakpoint at do_operation+244
+0 &amp;&amp; 1
+
+Breakpoint at do_operation+244
+0 &amp;&amp; 0
+
+Breakpoint at do_operation+244
+32 | 16
+
+Breakpoint at do_operation+244
+1 + 1
+</code></pre><p>Le code semble itérer sur la première ligne de notre entrée utilsateur, il va prendre le premier élément en <code>user_input[0][0]</code> et vérifier que celui-ci se trouve entre 1 et 9 et que la valeur n&rsquo;apparaît pas deux fois sur la ligne.</p><p>Voici un pseudo code de ce que fais cette fonction :</p><pre tabindex=0><code>function inattendu(line) {
+    val = 0
+    is_ok = true
+    for (i in range 9) {
+        x = user_input[line][i]
+        if (x &lt; 1 or x &gt; 9) {
+            is_ok = false
+        }
+        shifted = 1 &lt;&lt; x
+        if (shifted &amp; val) {
+            is_ok = false
+        }
+        val = val | shifted
+    }
+    return is_ok
+}
+</code></pre><p>Cette fonction est appelé 9 fois donc très probablement pour chaque ligne de notre input.</p><p>Ensuite une autre fonction très similaire est appelée 9 fois, celle-ci effectue les mêmes opérations mais cette fois sur chaque colonne.</p><p>A partir de là, on peut se douter que le programme implémenté est un sudoku. Je n&rsquo;ai pas reverse la fonction <code>discutable</code> mais celle-ci effectuant des multiplications par 3 et étant donné le contexte du challenge on peut très facilement deviner qu&rsquo;elle va vérifier que chaque région du sudoku est valide.</p><p>À la suite de cela, le programme va itérer sur un tableau 9x9 qu&rsquo;il possède en mémoire.</p><p>on le comprend grâce aux extraits suivants de notre trace d&rsquo;exécution :</p><pre tabindex=0><code>get array[0]
+get array[0]
+0 != 0
+[...]
+get array[0]
+get array[1]
+0 != 0
+[...]
+get array[0]
+get array[2]
+0 != 0
+[...]
+get array[0]
+get array[7]
+1 != 0
+[...]
+get array[0]
+get array[8]
+8 != 0
+[...]
+</code></pre><p>Lorsque la valeur extraite de ce tableau est différente de 0, le programme appelle la fonction <code>gerber</code>.
+On peut ainsi reconstruire le contenu du tableau, qui ressemble à ceci :</p><pre tabindex=0><code>0 0 0 0 0 0 0 1 8
+0 0 5 6 1 0 0 2 0
+3 0 0 0 0 0 5 1 0
+0 0 0 0 0 0 0 0 2
+1 0 0 0 3 0 0 4 4
+0 0 0 0 2 1 0 0 5
+0 0 0 0 4 3 0 6 1
+3 1 0 1 0 6 0 0 0
+0 0 4 7 0 0 0 6 7
+</code></pre><p>La fonction <code>gerber</code>, à partir de la position et de la valeur non nulle, appelle ensuite la fonction <code>central</code>. Celle-ci génère quatre nouvelles positions autour de la position d&rsquo;origine, dans un rayon (horizontal et vertical, pas en diagonale) de N cases, où N correspond à la valeur lue dans notre grille à la position de départ.</p><p>Le programme va ensuite vérifier si au moins une de ces 4 nouvelles positions contient la valeur N.</p><p>Voici un exemple avec les valeurs 3 et 1 afin que ce soit plus parlant.</p><p><img loading=lazy src=/img/posts/fcsc2025-fcsclang/condition_sudoku.png alt="grille de condition sudoku"></p><h2 id=résolution>Résolution<a hidden class=anchor aria-hidden=true href=#résolution>#</a></h2><p>Nous avons donc maintenant toutes les conditions en mains pour pouvoir écrire notre script de solve.</p><p>Pour cela, j&rsquo;ai utilisé un script z3 permettant de résoudre un sudoku auquel j&rsquo;ai ajouté nos conditions.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=kn>from</span> <span class=nn>z3</span> <span class=kn>import</span> <span class=o>*</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>grid</span> <span class=o>=</span> <span class=p>[[</span><span class=n>Int</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;cell_</span><span class=si>{</span><span class=n>i</span><span class=si>}</span><span class=s2>_</span><span class=si>{</span><span class=n>j</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span> <span class=k>for</span> <span class=n>j</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>)]</span> <span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>)]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>s</span> <span class=o>=</span> <span class=n>Solver</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>j</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>s</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>And</span><span class=p>(</span><span class=n>grid</span><span class=p>[</span><span class=n>i</span><span class=p>][</span><span class=n>j</span><span class=p>]</span> <span class=o>&gt;=</span> <span class=mi>1</span><span class=p>,</span> <span class=n>grid</span><span class=p>[</span><span class=n>i</span><span class=p>][</span><span class=n>j</span><span class=p>]</span> <span class=o>&lt;=</span> <span class=mi>9</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=n>s</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>Distinct</span><span class=p>(</span><span class=o>*</span><span class=n>grid</span><span class=p>[</span><span class=n>i</span><span class=p>]))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>j</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=n>col</span> <span class=o>=</span> <span class=p>[</span><span class=n>grid</span><span class=p>[</span><span class=n>i</span><span class=p>][</span><span class=n>j</span><span class=p>]</span> <span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>)]</span>
+</span></span><span class=line><span class=cl>    <span class=n>s</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>Distinct</span><span class=p>(</span><span class=o>*</span><span class=n>col</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>bi</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>3</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>bj</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>3</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>block</span> <span class=o>=</span> <span class=p>[</span><span class=n>grid</span><span class=p>[</span><span class=mi>3</span><span class=o>*</span><span class=n>bi</span> <span class=o>+</span> <span class=n>di</span><span class=p>][</span><span class=mi>3</span><span class=o>*</span><span class=n>bj</span> <span class=o>+</span> <span class=n>dj</span><span class=p>]</span> <span class=k>for</span> <span class=n>di</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>3</span><span class=p>)</span> <span class=k>for</span> <span class=n>dj</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>3</span><span class=p>)]</span>
+</span></span><span class=line><span class=cl>        <span class=n>s</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>Distinct</span><span class=p>(</span><span class=o>*</span><span class=n>block</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>condition_grid</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=mi>8</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>5</span><span class=p>,</span> <span class=mi>6</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>2</span><span class=p>,</span> <span class=mi>0</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>3</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>5</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=mi>0</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>2</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>1</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>3</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>4</span><span class=p>,</span> <span class=mi>4</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>2</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>5</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>4</span><span class=p>,</span> <span class=mi>3</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>6</span><span class=p>,</span> <span class=mi>1</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>3</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>6</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>    <span class=p>[</span><span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>4</span><span class=p>,</span> <span class=mi>7</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>6</span><span class=p>,</span> <span class=mi>7</span><span class=p>],</span>
+</span></span><span class=line><span class=cl><span class=p>]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>get_positions</span><span class=p>(</span><span class=n>i</span><span class=p>,</span><span class=n>j</span><span class=p>,</span><span class=n>k</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=p>[(</span><span class=n>a</span><span class=p>,</span> <span class=n>b</span><span class=p>)</span> <span class=k>for</span> <span class=n>a</span><span class=p>,</span><span class=n>b</span> <span class=ow>in</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>        <span class=p>(</span><span class=n>i</span> <span class=o>+</span> <span class=n>k</span><span class=p>,</span> <span class=n>j</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=p>(</span><span class=n>i</span><span class=p>,</span> <span class=n>j</span> <span class=o>+</span> <span class=n>k</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=p>(</span><span class=n>i</span><span class=p>,</span> <span class=n>j</span> <span class=o>-</span> <span class=n>k</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=p>(</span><span class=n>i</span> <span class=o>-</span> <span class=n>k</span><span class=p>,</span> <span class=n>j</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>    <span class=p>]</span> <span class=k>if</span> <span class=n>a</span> <span class=o>&lt;</span> <span class=mi>9</span> <span class=ow>and</span> <span class=n>b</span> <span class=o>&lt;</span> <span class=mi>9</span> <span class=ow>and</span> <span class=n>a</span> <span class=o>&gt;=</span> <span class=mi>0</span> <span class=ow>and</span> <span class=n>b</span> <span class=o>&gt;=</span> <span class=mi>0</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># on ajoute nos conditions spécifiques à partir de notre grille de condition</span>
+</span></span><span class=line><span class=cl><span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>j</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>k</span> <span class=o>=</span> <span class=n>condition_grid</span><span class=p>[</span><span class=n>i</span><span class=p>][</span><span class=n>j</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=n>k</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>pos</span> <span class=o>=</span> <span class=n>get_positions</span><span class=p>(</span><span class=n>i</span><span class=p>,</span><span class=n>j</span><span class=p>,</span> <span class=n>k</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>s</span><span class=o>.</span><span class=n>add</span><span class=p>(</span><span class=n>Or</span><span class=p>(</span><span class=o>*</span><span class=p>[</span> <span class=n>grid</span><span class=p>[</span><span class=n>x</span><span class=p>][</span><span class=n>y</span><span class=p>]</span> <span class=o>==</span> <span class=n>k</span> <span class=k>for</span> <span class=n>x</span><span class=p>,</span><span class=n>y</span> <span class=ow>in</span> <span class=n>pos</span> <span class=p>]))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=n>s</span><span class=o>.</span><span class=n>check</span><span class=p>()</span> <span class=o>==</span>  <span class=n>sat</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=n>m</span> <span class=o>=</span> <span class=n>s</span><span class=o>.</span><span class=n>model</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=n>solution</span> <span class=o>=</span> <span class=p>[[</span><span class=n>m</span><span class=o>.</span><span class=n>evaluate</span><span class=p>(</span><span class=n>grid</span><span class=p>[</span><span class=n>i</span><span class=p>][</span><span class=n>j</span><span class=p>])</span><span class=o>.</span><span class=n>as_long</span><span class=p>()</span> <span class=k>for</span> <span class=n>j</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>)]</span> <span class=k>for</span> <span class=n>i</span> <span class=ow>in</span> <span class=nb>range</span><span class=p>(</span><span class=mi>9</span><span class=p>)]</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>ligne</span> <span class=ow>in</span> <span class=n>solution</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=n>ligne</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Pas de solution trouvée.&#34;</span><span class=p>)</span>
+</span></span></code></pre></div><p>On lance notre script z3 et on obtiens notre grille de solution.</p><pre tabindex=0><code>8 3 6 2 1 9 7 5 4
+5 4 9 7 8 6 3 1 2
+1 2 7 3 4 5 9 6 8
+6 5 8 1 9 3 4 2 7
+3 1 4 8 2 7 6 9 5
+7 9 2 5 6 4 8 3 1
+9 6 5 4 7 1 2 8 3
+4 8 1 6 3 2 5 7 9
+2 7 3 9 5 8 1 4 6
+</code></pre><p>On peut maintenant l&rsquo;envoyer à notre programme et celui-ci nous renvoie le flag !</p><pre tabindex=0><code>FCSC{836219754549786312127345968658193427314827695792564831965471283481632579273958146}
+</code></pre></div><footer class=post-footer><ul class=post-tags><li><a href=https://trikkss.github.io/tags/reverse-engineering/>Reverse Engineering</a></li><li><a href=https://trikkss.github.io/tags/linux/>Linux</a></li><li><a href=https://trikkss.github.io/tags/z3/>Z3</a></li><li><a href=https://trikkss.github.io/tags/sudoku/>Sudoku</a></li><li><a href=https://trikkss.github.io/tags/vm/>VM</a></li><li><a href=https://trikkss.github.io/tags/tree-sitter/>Tree-Sitter</a></li></ul><nav class=paginav><a class=prev href=https://trikkss.github.io/posts/fcsc2025_chatouille/><span class=title>« Prev</span><br><span>FCSC 2025 - Chatouille</span>
+</a><a class=next href=https://trikkss.github.io/posts/fcsc2024_tv-hacks1/><span class=title>Next »</span><br><span>FCSC 2024 - TV Hacks 1/2</span></a></nav></footer></article></main><footer class=footer><span>&copy; 2025 <a href=https://trikkss.github.io/>TRIKKSS Blog</a></span>
+<span>Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+        <a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top aria-label="go to top" title="Go to Top (Alt + G)" class=top-link id=top-link accesskey=g><svg viewBox="0 0 12 6" fill="currentcolor"><path d="M12 6H0l6-6z"/></svg>
+</a><script>let menu=document.getElementById("menu");menu&&(menu.scrollLeft=localStorage.getItem("menu-scroll-position"),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)}),document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var t=this.getAttribute("href").substr(1);window.matchMedia("(prefers-reduced-motion: reduce)").matches?document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView({behavior:"smooth"}),t==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${t}`)})})</script><script>var mybutton=document.getElementById("top-link");window.onscroll=function(){document.body.scrollTop>800||document.documentElement.scrollTop>800?(mybutton.style.visibility="visible",mybutton.style.opacity="1"):(mybutton.style.visibility="hidden",mybutton.style.opacity="0")}</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{document.body.className.includes("dark")?(document.body.classList.remove("dark"),localStorage.setItem("pref-theme","light")):(document.body.classList.add("dark"),localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>
